@@ -6,6 +6,7 @@ Compartment level analysis and plot funcitons
 #global dependence
 import numpy as np
 import pandas as pd
+from . import CHARMio
 
 # Decay profile
 # for p(s) curve use log_bins=True , otherwise(e.g. normalize distance for Hi-C matrix ) use log_bins=False
@@ -81,15 +82,46 @@ def getPearsonCorrMatrix(matrix:np.ndarray)->np.ndarray:
     matrix = np.corrcoef(matrix)
     return matrix
 
+def addVec(a,b):
+    if len(a) < len(b):
+        c = b.copy()
+        c[:len(a)] += a
+    else:
+        c = a.copy()
+        c[:len(b)] += b
+    return c
+
+def getPsData(mcoolPath,chromlist,resolution=10000,celltype="unknown")->pd.DataFrame:
+    matlist = [CHARMio.getMatrixFromMCOOLs(mcoolPath,genome_coord=chrom,resolution=resolution) for chrom in chromlist]
+    bin = psDataFromMat(matlist[0])[0]
+    value = np.array([])
+    for mat in matlist:
+        value = addVec(value,psDataFromMat(mat)[1])
+    return pd.DataFrame({"bin":bin,"aveCount":value,"celltype":celltype})
+
 # quick visualize functions
-def plotPsCurve(bin:np.array,value=np.array,title="P(s) curve"):
+def plotPsCurve(mcoolsPath:list,celltypeNames:list,chroms:list,resolution=100000,title="P(s) curve",plotType="interaction"):
     """
     plotPsCurve function take bin and value
     """
     import plotly.express as px
-    fig = px.line(x=bin,y=value,title=title,log_x=True,log_y=True).update_layout(template='simple_white')
+    from IPython.display import Image
+
+    #Calculate P(s) data, get a 3 column pd.DataFrame with (bin,resolution,celltype)
+    psDataAll = []
+    for i in range(len(mcoolsPath)):
+        psDataAll.append(getPsData(mcoolsPath[i],["chr"+str(i+1) for i in range(len(chroms))],resolution=resolution,celltype=celltypeNames[i])) 
+    merged = pd.concat(psDataAll)
+
+    data =  pd.merge(merged,merged.groupby("celltype").sum(),how="left",on="celltype").assign(prob= lambda df: df.aveCount_x/df.aveCount_y)
+
+    fig = px.line(x=data["bin_x"]*resolution,y=data["prob"],color=data["celltype"],title=title,log_x=True,log_y=True).update_layout(template='simple_white')
     fig.update_layout(width=800,height=600)
-    return fig 
+    fig.update_layout(xaxis_title="Genomic Distance(bp)",
+                    yaxis_title="Contact Probability")
+    if(plotType == "interaction"):
+        return fig
+    else : return Image(fig.to_image(format="png", engine="kaleido"))
 
 def plotMatrix(matrix:np.ndarray,if_log=False,title="Matrix"):
     """
