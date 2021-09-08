@@ -6,12 +6,7 @@ Compartment level analysis and plot funcitons
 #global dependence
 import numpy as np
 import pandas as pd
-import multiprocess
-import cooler
-import cooltools
-import cooltools.expected
 from . import CHARMio
-import bioframe
 
 # Decay profile
 # for p(s) curve use log_bins=True , otherwise(e.g. normalize distance for Hi-C matrix ) use log_bins=False
@@ -82,9 +77,7 @@ def getOEMatrix(matrix:np.ndarray)->np.ndarray:
     for i in range(n):
         for j in range(n):
             dist_matrix[i, j] = dist_vals[abs(j - i)]
-    
-    #obs/exp = obs / exp
-    matrix = matrix / dist_matrix
+    matrix /= dist_matrix
     
     return matrix
 
@@ -114,50 +107,36 @@ def getPsData(mcoolPath,chromlist,resolution=10000,celltype="unknown")->pd.DataF
         value = addVec(value,psDataFromMat(mat)[1])
     return pd.DataFrame({"bin":bin,"aveCount":value,"celltype":celltype})
 
-def cooltoolsGetRegions(refgenome)->pd.DataFrame:
+# quick visualize functions
+def plotPsCurve(mcoolsPath:list,celltypeNames:list,chroms:list,resolution=100000,title="P(s) curve",plotType="interaction"):
     """
-    get regions for compute expected, refgenome like "mm10" or "hg19" are fetched from UCSC by bioframe.
-    Notice: bioframe check internet connection from google.com and needed to be alter or set proxy if you are in China
+    plotPsCurve function take bin and value
     """
-    chromsizes = bioframe.fetch_chromsizes(refgenome,as_bed=True)
-    cens = bioframe.fetch_centromeres(refgenome)
-    arms = bioframe.split(chromsizes,cens,cols_points=['chrom','mid'])
-    return arms,chromsizes
+    import plotly.express as px
+    from IPython.display import Image
 
-def prepareRegionsForCooler(clr:cooler.Cooler,arms:pd.DataFrame,chromsizes:pd.DataFrame):
+    #Calculate P(s) data, get a 3 column pd.DataFrame with (bin,resolution,celltype)
+    psDataAll = []
+    for i in range(len(mcoolsPath)):
+        psDataAll.append(getPsData(mcoolsPath[i],["chr"+str(i+1) for i in range(len(chroms))],resolution=resolution,celltype=celltypeNames[i])) 
+    merged = pd.concat(psDataAll)
+
+    data =  pd.merge(merged,merged.groupby("celltype").sum(),how="left",on="celltype").assign(prob= lambda df: df.aveCount_x/df.aveCount_y)
+
+    fig = px.line(x=data["bin_x"]*resolution,y=data["prob"],color=data["celltype"],title=title,log_x=True,log_y=True).update_layout(template='simple_white')
+    fig.update_layout(width=800,height=600)
+    fig.update_layout(xaxis_title="Genomic Distance(bp)",
+                    yaxis_title="Contact Probability")
+    if(plotType == "interaction"):
+        return fig
+    else : return Image(fig.to_image(format="png", engine="kaleido"))
+
+def plotMatrix(matrix:np.ndarray,if_log=False,title="Matrix"):
     """
-    select only chromosomes present in the cooler
+    plotMatrix function for plot hic contact matrix
     """
-    chromsizes = chromsizes.set_index("chrom").loc[clr.chromnames].reset_index()
-    arms = arms.set_index("chrom").loc[clr.chromnames].reset_index()
-    # call this to automaticly assign names to chromosomal arms:
-    arms = bioframe.parse_regions(arms)
-    return arms
+    import plotly.express as px 
+    fig = px.imshow(matrix,color_continuous_scale=px.colors.sequential.Bluered)
+    fig = fig.update_layout(template='simple_white').update_layout(width=800,height=600)
 
-def cooltoolsExpected(clr:cooler.Cooler,nthreads:int,refgenome:str)->pd.DataFrame:
-    """
-    CHARMtools wrappers for cooltools
-    resolution is the resolution of cooler
-    refgenome like "mm10" or "hg19" are fetched from UCSC by bioframe.
-    """
-    nthreads = nthreads
-
-    # get arms 
-    chromsizes,arms = cooltoolsGetRegions(refgenome)
-    arms = prepareRegionsForCooler(clr,arms,chromsizes)
-
-    # Calculate expected interactions for chromosome arms
-    with multiprocess.Pool(nthreads) as pool:
-        expected = cooltools.expected.diagsum(
-            clr,
-            regions=arms,
-            transforms={
-                'balanced': lambda p: p['count'] * p['weight1'] * p['weight2']
-            },
-        map=pool.map
-        )
-
-    # Calculate average number of interactions per diagonal, this will be changed in the future versions of cooltools
-    expected['balanced.avg'] = expected['balanced.sum'] / expected['n_valid']
-
-    return expected,arms
+    return fig
