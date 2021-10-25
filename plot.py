@@ -26,7 +26,7 @@ def plotPsCurve(mcoolsPath:list,celltypeNames:list,chroms:list,resolution=100000
         return fig
     else : return Image(fig.to_image(format="png", engine="kaleido"))
 
-def plotMatrix(matrix:np.ndarray,if_log=False,title="Matrix",plotType="static"):
+def plotMatrix(matrix:np.ndarray,if_log=False,title="Matrix",plotType="static",range_color=None):
     """
     plotMatrix function for plot hic contact matrix
     """
@@ -36,8 +36,8 @@ def plotMatrix(matrix:np.ndarray,if_log=False,title="Matrix",plotType="static"):
     if(if_log == True): 
         matrix = np.log10(matrix)
 
-    fig = px.imshow(matrix,color_continuous_scale=px.colors.sequential.Bluered)
-    fig = fig.update_layout(template='simple_white').update_layout(width=800,height=600)
+    fig = px.imshow(matrix,color_continuous_scale=px.colors.sequential.Viridis,range_color=range_color)
+    fig = fig.update_layout(template='simple_white').update_layout(width=650,height=600)
 
     if(plotType == "interaction"):
         return fig
@@ -68,10 +68,10 @@ def plotRegionFromMCOOLS(filepath:str,resolution:int,genome_coord1:str,genome_co
     if(if_log == True): 
         matrix = np.log10(matrix+1)
 
-    #fig = px.imshow(matrix,color_continuous_scale=px.colors.sequential.Bluered)
-    fig = px.imshow(matrix)
-    fig = fig.update_layout(title=title)
-    fig = fig.update_layout(template='simple_white').update_layout(width=600,height=500)
+    fig = px.imshow(matrix,color_continuous_scale=px.colors.sequential.Viridis)
+    #fig = px.imshow(matrix)
+    #fig = fig.update_layout(title=title)
+    fig = fig.update_layout(template='simple_white').update_layout(width=650,height=600)
     fig = fig.update_layout(xaxis_title=genome_coord2,yaxis_title=genome_coord1)
 
     #manually change axis
