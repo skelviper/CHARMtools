@@ -26,7 +26,8 @@ def plotPsCurve(mcoolsPath:list,celltypeNames:list,chroms:list,resolution=100000
         return fig
     else : return Image(fig.to_image(format="png", engine="kaleido"))
 
-def plotMatrix(matrix:np.ndarray,if_log=False,title="Matrix",plotType="static",range_color=None):
+def plotMatrix(matrix:np.ndarray,if_log=False,title="Matrix",plotType="static",range_color=None,
+                axis2genome=False,genome_coord1=None,genome_coord2=None,resolution = None):
     """
     plotMatrix function for plot hic contact matrix
     """
@@ -39,6 +40,21 @@ def plotMatrix(matrix:np.ndarray,if_log=False,title="Matrix",plotType="static",r
     fig = px.imshow(matrix,color_continuous_scale=px.colors.sequential.Viridis,range_color=range_color)
     fig = fig.update_layout(template='simple_white').update_layout(width=650,height=600)
 
+    if (axis2genome):
+        import re
+        #manually change axis
+        posx = re.split("[:-]",genome_coord2)
+        xvals = np.percentile([np.round(i) for i in range(0,matrix.shape[1])],(0,25,50,75,100),interpolation='midpoint')
+        xtexts = xvals*resolution + int(posx[1].replace(",","")) + resolution/2
+        xtexts = [genomecoord2human(i) for i in xtexts]
+
+        posy = re.split("[:-]",genome_coord1)
+        yvals = np.percentile([np.round(i) for i in range(0,matrix.shape[0])],(0,25,50,75,100),interpolation='midpoint')
+        ytexts = yvals*resolution + int(posy[1].replace(",","")) + resolution/2
+        ytexts = [genomecoord2human(i) for i in ytexts]
+
+        fig = fig.update_xaxes(ticktext = xtexts,tickvals = xvals).update_yaxes(ticktext = ytexts,tickvals = yvals)
+
     if(plotType == "interaction"):
         return fig
     else : return Image(fig.to_image(format="png", engine="kaleido"))
@@ -48,7 +64,7 @@ def genomecoord2human(n):
     exp = int(np.log10(n)/3)
     return str(round(n/(1000**exp),2))+symbols[exp]
 
-def plotRegionFromMCOOLS(filepath:str,resolution:int,genome_coord1:str,genome_coord2=None,if_log=False,balance=False,title="Matrix",plotType="static"):
+def plotRegionFromMCOOLS(filepath:str,resolution:int,genome_coord1:str,genome_coord2=None,if_log=False,balance=False,title="Matrix",plotType="static",range_color=None):
     """
     plotMatrix function for plot hic contact matrix
     """
@@ -68,11 +84,10 @@ def plotRegionFromMCOOLS(filepath:str,resolution:int,genome_coord1:str,genome_co
     if(if_log == True): 
         matrix = np.log10(matrix+1)
 
-    fig = px.imshow(matrix,color_continuous_scale=px.colors.sequential.Viridis)
-    #fig = px.imshow(matrix)
-    #fig = fig.update_layout(title=title)
+    fig = px.imshow(matrix,color_continuous_scale=px.colors.sequential.Viridis,range_color=range_color)
+    fig = fig.update_layout(title=title)
     fig = fig.update_layout(template='simple_white').update_layout(width=650,height=600)
-    fig = fig.update_layout(xaxis_title=genome_coord2,yaxis_title=genome_coord1)
+    #fig = fig.update_layout(xaxis_title=genome_coord2,yaxis_title=genome_coord1)
 
     #manually change axis
     posx = re.split("[:-]",genome_coord2)
