@@ -106,3 +106,61 @@ def plotRegionFromMCOOLS(filepath:str,resolution:int,genome_coord1:str,genome_co
     if(plotType == "interaction"):
         return fig
     else : return Image(fig.to_image(format="png", engine="kaleido"))
+
+def plotMatrixWithGeneTrack(genes:pd.DataFrame,mat:np.ndarray, extent:list):
+    """
+    input: genes - genes to plot, should be in pd.DataFrame format contain "chrom-start-end-id-symbol-strand", sensitive to order
+              mat - matrix to plot, should be in numpy.ndarray format
+              extent - resize the matrix axis number to the extent size. List contain 4 elements, [x_start,x_end,y_start,y_end].
+
+              output: matplotlib figure
+    """
+    start1,end1,start2,end2 = extent
+
+    from matplotlib.ticker import EngFormatter
+    bp_formatter = EngFormatter('b')
+    import matplotlib.pyplot as plt
+    from dna_features_viewer import GraphicFeature, GraphicRecord
+
+    def format_ticks(ax, x=True, y=True, rotate=True):
+        if y:
+            ax.yaxis.set_major_formatter(bp_formatter)
+        if x:
+            ax.xaxis.set_major_formatter(bp_formatter)
+            ax.xaxis.tick_bottom()
+        if rotate:
+            ax.tick_params(axis='x',rotation=45)
+    def symbol2num(x):
+        if x=="+":
+            return +1
+        else: return -1
+
+    fig, axs = plt.subplots(figsize = (10,12), gridspec_kw={'height_ratios': [3, 9]},nrows=2,
+                            sharex=True,sharey=False,constrained_layout=True)
+
+    # plot gene track
+    features=[ GraphicFeature(start=gene[1], end=gene[2], strand=symbol2num(gene[5]), color="#ffffff",box_linewidth=0,
+            fontdict={"size":16,"family":"sans-serif"},
+            label=gene[4]) for gene in genes.values.tolist() if gene[1] >= start1 and gene[2] <= end1
+    ]
+    record = GraphicRecord(sequence_length=999999999, features=features)
+    ax = axs[0]
+    _ = record.plot(ax=ax)
+    plt.xlim(start1,end1)
+    format_ticks(ax)
+
+    # plot hic track
+    ax = axs[1]
+    im2 = ax.matshow(mat ,extent=extent)
+    plt.colorbar(im2,ax=ax,label=None)
+    format_ticks(ax)
+    
+    plt.rc('font', size=15)
+    plt.rc('axes', titlesize=15)     # fontsize of the axes title
+    plt.rc('axes', labelsize=15)    # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=15)    # fontsize of the tick labels
+    plt.rc('ytick', labelsize=15)    # fontsize of the tick labels
+    plt.rc('legend', fontsize=15)    # legend fontsize
+    plt.rc('figure', titlesize=15)  # fontsize of the figure title
+    
+    return fig

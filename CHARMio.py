@@ -39,3 +39,11 @@ def getMatrixFromCooler(filepath:str, genome_coord1:str,genome_coord2=None, reso
 
     return matrix
 
+def cooltoolsGetObsExp(filepath:str, genome_coord1:str,genome_coord2=None, resolution=40000, balance=False)->np.ndarray:
+    """
+    input: cooler or mcool path
+    output: observe / expected matrix as np.ndarry 
+    """
+    import cooltools
+    pass
+    # if filepath.split(sep='.')[-1] == "mcool":

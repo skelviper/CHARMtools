@@ -7,7 +7,7 @@ import numpy as np
 from cooltools import snipping
 import multiprocess
 
-#loop should first be called and save in a tsv-like file contain atleast chrom-start-end for both loop anchors
+#loop should first be called and save in a tsv-like file contain at least chrom-start-end for both loop anchors
 def cooltoolsGetOEPileUp(clr:cooler.Cooler,flank:int,resolution:int,expected:pd.DataFrame,loopAnchor:pd.DataFrame,arms:pd.DataFrame,nthreads:int)->np.ndarray:
     """
     cooltools warpper for OE pileup
@@ -33,7 +33,7 @@ def cooltoolsGetOEPileUp(clr:cooler.Cooler,flank:int,resolution:int,expected:pd.
     # create the stack of snips:
     with multiprocess.Pool(nthreads) as pool:
         stack = cooltools.snipping.pileup(
-                windows.sample(30),
+                windows,
                 oe_snipper.select,
                 oe_snipper.snip,
                 map=pool.map
