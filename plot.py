@@ -1,5 +1,7 @@
 # quick visualize functions
+from _plotly_utils.colors.sequential import Viridis
 from . import compartment
+from . import structure
 import pandas as pd
 import numpy as np
 
@@ -64,7 +66,8 @@ def genomecoord2human(n):
     exp = int(np.log10(n)/3)
     return str(round(n/(1000**exp),2))+symbols[exp]
 
-def plotRegionFromMCOOLS(filepath:str,resolution:int,genome_coord1:str,genome_coord2=None,if_log=False,balance=False,title="Matrix",plotType="static",range_color=None):
+def plotRegionFromMCOOLS(filepath:str,resolution:int,genome_coord1:str,genome_coord2=None,
+    if_log=False,balance=False,title="Matrix",plotType="static",range_color=None,color_continuous_scale = None):
     """
     plotMatrix function for plot hic contact matrix
     """
@@ -83,8 +86,9 @@ def plotRegionFromMCOOLS(filepath:str,resolution:int,genome_coord1:str,genome_co
 
     if(if_log == True): 
         matrix = np.log10(matrix+1)
-
-    fig = px.imshow(matrix,color_continuous_scale=px.colors.sequential.Viridis,range_color=range_color)
+    if(color_continuous_scale == None):
+        color_continuous_scale = px.colors.sequential.Viridi    
+    fig = px.imshow(matrix,color_continuous_scale=color_continuous_scale,range_color=range_color)
     fig = fig.update_layout(title=title)
     fig = fig.update_layout(template='simple_white').update_layout(width=650,height=600)
     #fig = fig.update_layout(xaxis_title=genome_coord2,yaxis_title=genome_coord1)
@@ -107,14 +111,16 @@ def plotRegionFromMCOOLS(filepath:str,resolution:int,genome_coord1:str,genome_co
         return fig
     else : return Image(fig.to_image(format="png", engine="kaleido"))
 
-def plotMatrixWithGeneTrack(genes:pd.DataFrame,mat:np.ndarray, extent:list):
+def plotMatrixWithGeneTrack(genes:pd.DataFrame,mat:np.ndarray, extent:list, site_bedpe=None,clow=0, chigh=1,if_colorbar=True,cmap="bwr"):
     """
     input: genes - genes to plot, should be in pd.DataFrame format contain "chrom-start-end-id-symbol-strand", sensitive to order
               mat - matrix to plot, should be in numpy.ndarray format
-              extent - resize the matrix axis number to the extent size. List contain 4 elements, [x_start,x_end,y_start,y_end].
+              extent - resize the matrix axis number to the extent size. List contain 4 elements, [x_start,x_end,y_end,y_start].
+              site_bedpe - takes a standard bedpe format file and draw circles in these positions
 
               output: matplotlib figure
     """
+    
     start1,end1,start2,end2 = extent
 
     from matplotlib.ticker import EngFormatter
@@ -135,7 +141,7 @@ def plotMatrixWithGeneTrack(genes:pd.DataFrame,mat:np.ndarray, extent:list):
             return +1
         else: return -1
 
-    fig, axs = plt.subplots(figsize = (10,12), gridspec_kw={'height_ratios': [3, 9]},nrows=2,
+    fig, axs = plt.subplots(figsize = (9,12), gridspec_kw={'height_ratios': [1, 4]},nrows=2,
                             sharex=True,sharey=False,constrained_layout=True)
 
     # plot gene track
@@ -143,7 +149,7 @@ def plotMatrixWithGeneTrack(genes:pd.DataFrame,mat:np.ndarray, extent:list):
             fontdict={"size":16,"family":"sans-serif"},
             label=gene[4]) for gene in genes.values.tolist() if gene[1] >= start1 and gene[2] <= end1
     ]
-    record = GraphicRecord(sequence_length=999999999, features=features)
+    record = GraphicRecord(sequence_length=end1-start1, features=features)
     ax = axs[0]
     _ = record.plot(ax=ax)
     plt.xlim(start1,end1)
@@ -151,9 +157,19 @@ def plotMatrixWithGeneTrack(genes:pd.DataFrame,mat:np.ndarray, extent:list):
 
     # plot hic track
     ax = axs[1]
-    im2 = ax.matshow(mat ,extent=extent)
-    plt.colorbar(im2,ax=ax,label=None)
+    im2 = ax.matshow(mat ,extent=extent,vmin = clow, vmax = chigh , cmap=cmap)
+
+    resolution = (end1-start1)/mat.shape[0]
+
+    if site_bedpe is not None :
+        for site in site_bedpe.values.tolist():
+            ax.add_artist(plt.Circle(((site[1]+site[2])/2-resolution,(site[4]+site[5])/2-resolution),radius=2*resolution,color="black",alpha=0.5,fill=False))
+
+    if(if_colorbar==True):
+        plt.colorbar(im2,ax=ax,label=None)
+    plt.locator_params(nbins=8)
     format_ticks(ax)
+    
     
     plt.rc('font', size=15)
     plt.rc('axes', titlesize=15)     # fontsize of the axes title
@@ -163,4 +179,32 @@ def plotMatrixWithGeneTrack(genes:pd.DataFrame,mat:np.ndarray, extent:list):
     plt.rc('legend', fontsize=15)    # legend fontsize
     plt.rc('figure', titlesize=15)  # fontsize of the figure title
     
+    return fig
+
+
+def plotRegionWIthGeneTrack(matrix1coolPath:list,matrix2coolPath:list, genome_coord:str, gene_bed:str,site_bedpe=None,
+                                                clow=-0.2,chigh=0.2,if_colorbar=False,if_diff=False,cmap="bwr"):
+    import re
+    import matplotlib.pyplot as plt
+
+    coordList = re.split("[:-]",genome_coord)
+
+    mat1 = structure.get3dProximityStackMatrix(matrix1coolPath,genome_coord)
+    if(matrix1coolPath == matrix2coolPath):
+        mat2 = mat1
+    else:
+        mat2 = structure.get3dProximityStackMatrix(matrix2coolPath,genome_coord)
+
+    if(if_diff):
+        mat = structure.get3dProximityStackMatrix(matrix1coolPath,genome_coord) - structure.get3dProximityStackMatrix(matrix2coolPath,genome_coord)
+    else:
+        mat = np.triu(mat1) + np.tril(mat2)
+    
+    genes  = pd.read_csv(gene_bed,sep="\t",header=None)
+    genes  = genes[genes[0] == coordList[0]]
+
+    fig = plotMatrixWithGeneTrack(genes = genes,mat = mat,site_bedpe=site_bedpe, 
+                                            extent = [int(coordList[1]),int(coordList[2]),int(coordList[2]),int(coordList[1])],clow=clow,chigh=chigh,if_colorbar=if_colorbar,cmap=cmap
+                        )
+    plt.locator_params(nbins=4)
     return fig
