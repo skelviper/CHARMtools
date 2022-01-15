@@ -4,9 +4,7 @@ import pandas as pd
 import gzip
 import os
 
-
 #upsteram hic
-
 def divide_name(filename):
     #home-made os.path.splitext, for it can't handle "name.a.b.c" properly
     basename = os.path.basename(filename)
