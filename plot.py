@@ -1,6 +1,6 @@
 # quick visualize functions
 from _plotly_utils.colors.sequential import Viridis
-from . import compartment
+#from . import compartment
 from . import structure
 import pandas as pd
 import numpy as np

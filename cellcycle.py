@@ -22,10 +22,17 @@ from functools import partial
 
 from .CHARMio import parse_pairs
 
-def window_count(distances:pd.DataFrame, win_num)->pd.Series:
+def window_count(distances:pd.DataFrame, win_num:int,type="Nagano",resolution=100000)->pd.Series:
     # count distribution of distance array
-    ## breaks from Nagano2017:
-    breaks = [0] + [1000*2**(0.125*i) for i in range(0, win_num)] 
+    if type == "Nagano":
+        ## breaks from Nagano2017:
+        breaks = [0] + [1000*2**(0.125*i) for i in range(0, win_num)] 
+    elif type == "Ps":
+        ## ps curve-like breaks
+        breaks = [i*resolution for i in range(win_num+1)]
+    else:
+        raise ValueError("type must be Nagano or Ps")
+
     window_count = []
     for index, break_ in enumerate(breaks):
         if index == win_num:
@@ -38,7 +45,7 @@ def window_count(distances:pd.DataFrame, win_num)->pd.Series:
     # normalized by all intra contacts
     return window_count/len(distances)
 
-def dis_counts(cell_name:str):
+def dis_counts(cell_name:str,win_num=150,type="Nagano",resolution=100000):
     # work for 11 column table only
     # get cell's intra contact's distribution in Peter's window
     # using customized .pairs parser
@@ -48,7 +55,7 @@ def dis_counts(cell_name:str):
     intra = contacts.loc[contacts["chr1"] == contacts["chr2"]]
     distances = abs(intra["pos1"] - intra["pos2"])
     # count according to Peter's window range
-    counts = window_count(distances, 150)
+    counts = window_count(distances,win_num=win_num,type=type,resolution=resolution)
     counts.name = cell_name
     #return counts
     return counts 
@@ -258,6 +265,9 @@ def _contact_describe(pairsf:str,c1=1,p1=2,c2=3,p2=4) -> pd.Series:
         group = "blank"
     
     return {"near_p":short_r, "mitotic_p":mitotic_r, "farAvg":farAvg.mean(),"NaganoCellcycle":group }
+
+def calc_premeta_score():
+    pass
 
 def calc_contact_describe(filesp:pd.DataFrame,c1=1,p1=2,c2=3,p2=4,threads=24):
     """

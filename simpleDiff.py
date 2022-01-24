@@ -125,6 +125,7 @@ def simpleDiff(coolerPath1:list,coolerPath2:list,genome_coord:str,bins=500,resol
     del mat2
 
     #format dataframe
+    where = np.where((reMat < fdr_threshold) & (reMat > 0))
     where_list = (np.array(where)*resolution).tolist()
     where_list.append(reMat_stats[where].tolist())
     where_list.append(reMat[where].tolist())
@@ -144,17 +145,28 @@ def simpleDiff(coolerPath1:list,coolerPath2:list,genome_coord:str,bins=500,resol
 if __name__ == "__main__":
     import argparse
     import ray
-    import glob
+    #import glob
     import time
 
     parser = argparse.ArgumentParser(description='Get simple diff between two cooler files')
+    parser.add_argument('-i1', '--input1', nargs='+', help='cooler file path list for celltype1', required=True)
+    parser.add_argument('-i2', '--input2', nargs='+', help='cooler file path list for celltype2', required=True)
+    parser.add_argument('-b', '--bins', type=int, help='bins for matrix, e.g. for 20k resolution, 500bins needed for 10mb range', required=True)
+    parser.add_argument('-t','--threads', help='number of threads', required=False, default=20)
+    parser.add_argument('-r','--resolution', help='resolution of matrix, e.g. for 20k resolution, 20000', required=False, default=20000)
+    parser.add_argument('-o', '--output', help='output file path', required=True)
 
-    ray.init(num_cpus=3)
+    #chroms = ["chr"+str(i) for i in range(1,19)]
+    chroms = ["chr19","chr18","chr17"]
+
+    ray.init(num_cpus=int(parser.parse_args().threads))
     simpleDiff_remote = ray.remote(simpleDiff)
 
     start = time.time()
-    futures = [simpleDiff_remote.remote(glob.glob("./share/ectoderm/*"),glob.glob("./share/mesoderm/*"),genome_coord=chrom) for chrom in chroms]
+    futures = [simpleDiff_remote.remote(parser.parse_args().input1,parser.parse_args().input2,genome_coord=chrom,
+    bins = parser.parse_args().bins,) for chrom in chroms]
     res = pd.concat(ray.get(futures), axis=0)
+    res.to_csv(parser.parse_args().output,sep="\t",index=False)
     end = time.time()
     ray.shutdown()
     print("duration = ",end-start," seconds")

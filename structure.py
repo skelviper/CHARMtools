@@ -8,14 +8,13 @@ def get3dProximityStackMatrix(listCoolPath:list,genome_coord1:str,genome_coord2=
     input: 
     output: percentage matrix
     """
-
-    count=0
-    mat = 0
-    for cool in listCoolPath:
-        if (path.exists(cool) ):
-            count +=1
-            mat = np.add(mat,CHARMio.getMatrixFromCooler(cool,genome_coord1,genome_coord2,resolution))
-    return mat/count/2
+    ori_len = len(listCoolPath)
+    listCoolPath = [cool for cool in listCoolPath if path.exists(cool)]
+    if len(listCoolPath) < ori_len:
+        import warnings
+        warnings.warn("Some cool files are not found, proceeding with only coolfiles exsit in the list.")
+    ave = np.average([CHARMio.getMatrixFromCooler(cool,genome_coord1,genome_coord2,resolution) for cool in listCoolPath],axis=0) / 2
+    return ave
 
 #split numpy array into different length numpy arrays
 def split_array(array,length):

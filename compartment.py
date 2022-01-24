@@ -9,7 +9,7 @@ import pandas as pd
 import multiprocess
 import cooler
 import cooltools
-import cooltools.expected
+import cooltools.api.expected
 from . import CHARMio
 import bioframe
 
