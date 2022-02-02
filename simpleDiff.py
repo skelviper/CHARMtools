@@ -156,8 +156,8 @@ if __name__ == "__main__":
     parser.add_argument('-r','--resolution', help='resolution of matrix, e.g. for 20k resolution, 20000', required=False, default=20000)
     parser.add_argument('-o', '--output', help='output file path', required=True)
 
-    #chroms = ["chr"+str(i) for i in range(1,19)]
-    chroms = ["chr19","chr18","chr17"]
+    chroms = ["chr"+str(i) for i in range(1,19)]
+    #chroms = ["chr19","chr18","chr17"]
 
     ray.init(num_cpus=int(parser.parse_args().threads))
     simpleDiff_remote = ray.remote(simpleDiff)

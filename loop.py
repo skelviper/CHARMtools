@@ -13,7 +13,7 @@ def cooltoolsGetOEPileUp(clr:cooler.Cooler,flank:int,resolution:int,expected:pd.
     loopAnchor.loc[:, 'mid1'] = (loopAnchor['start1'] + loopAnchor['end1'])//2
     loopAnchor.loc[:, 'mid2'] = (loopAnchor['start2'] + loopAnchor['end2'])//2
 
-    stack = cooltools.pileup(clr, loopAnchor, view_df=arms, expected_df=expected, flank=100_000,nproc=nthreads)
+    stack = cooltools.pileup(clr, loopAnchor, view_df=arms, expected_df=expected, flank=flank,nproc=nthreads)
 
     mtx = np.nanmean(stack, axis=2)
 
