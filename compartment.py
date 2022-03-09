@@ -119,9 +119,10 @@ def cooltoolsGetRegions(refgenome)->pd.DataFrame:
     get regions for compute expected, refgenome like "mm10" or "hg19" are fetched from UCSC by bioframe.
     Notice: bioframe check internet connection from google.com and needed to be alter or set proxy if you are in China
     """
-    chromsizes = bioframe.fetch_chromsizes(refgenome,as_bed=True)
+    chromsizes = bioframe.fetch_chromsizes(refgenome)
     cens = bioframe.fetch_centromeres(refgenome)
-    arms = bioframe.split(chromsizes,cens,cols_points=['chrom','mid'])
+    arms = bioframe.make_chromarms(chromsizes,cens)
+
     return arms,chromsizes
 
 def prepareRegionsForCooler(clr:cooler.Cooler,arms:pd.DataFrame,chromsizes:pd.DataFrame):
@@ -143,18 +144,17 @@ def cooltoolsExpected(clr:cooler.Cooler,nthreads:int,refgenome:str)->pd.DataFram
     nthreads = nthreads
 
     # get arms 
-    chromsizes,arms = cooltoolsGetRegions(refgenome)
-    arms = prepareRegionsForCooler(clr,arms,chromsizes)
+    chromsizes = bioframe.fetch_chromsizes(refgenome)
+    cens = bioframe.fetch_centromeres(refgenome)
+    arms = bioframe.make_chromarms(chromsizes, cens)
+    arms = arms.set_index("chrom").loc[clr.chromnames].reset_index()
 
-    # Calculate expected interactions for chromosome arms
-    with multiprocess.Pool(nthreads) as pool:
-        expected = cooltools.expected.diagsum(
-            clr,
-            regions=arms,
-            transforms={
-                'balanced': lambda p: p['count'] * p['weight1'] * p['weight2']
-            },
-        map=pool.map
+    expected = cooltools.expected_cis(
+            clr=clr,
+            view_df=arms,
+            smooth=False,
+            aggregate_smoothed=False,
+            nproc=nthreads
         )
 
     # Calculate average number of interactions per diagonal, this will be changed in the future versions of cooltools
@@ -164,11 +164,11 @@ def cooltoolsExpected(clr:cooler.Cooler,nthreads:int,refgenome:str)->pd.DataFram
 
 def cooltoolsGetPsData(clr:cooler.Cooler,nthreads:int,refgenome:str)->pd.DataFrame:
 	expected,arms = cooltoolsExpected(clr,20,"mm10")
-	expected = expected[expected['region'].str.contains("chr[0-9]")]
-	aggExpected = expected.groupby('diag').agg({'n_valid':'sum','count.sum':'sum','balanced.sum':'sum'}).reset_index()
+	expected = expected[expected['region1'].str.contains("chr[0-9]")]
+	aggExpected = expected.groupby('dist').agg({'n_valid':'sum','count.sum':'sum','balanced.sum':'sum'}).reset_index()
 	# Convert indices of diagonals into genomic separation, expressed in basepairs.
 	aggExpected['s_bp'] = (
-	    aggExpected['diag']
+	    aggExpected['dist']
 	    * clr.binsize)
 
 	# Now we can calculate the average raw interaction counts and normalized contact frequencies.
@@ -182,16 +182,16 @@ def cooltoolsGetPsData(clr:cooler.Cooler,nthreads:int,refgenome:str)->pd.DataFra
 	    / aggExpected['n_valid']
 	)
 	# Logbin-expected aggregates P(s) curves per region over exponentially increasing distance bins.
-	lb_cvd, lb_slopes, lb_distbins = cooltools.expected.logbin_expected(expected)
+	lb_cvd, lb_slopes, lb_distbins = cooltools.api.expected.logbin_expected(expected)
 
 	# The resulting table contains P(s) curves for each individual region.
 	# Aggregating these curves into a single genome-wide curve is involving too,
 	# so we created a separate function for this too.
-	lb_cvd_agg, lb_slopes_agg = cooltools.expected.combine_binned_expected(
+	lb_cvd_agg, lb_slopes_agg = cooltools.api.expected.combine_binned_expected(
 	    lb_cvd,
 	    binned_exp_slope=lb_slopes
 	)
 
-	lb_cvd_agg['s_bp'] = lb_cvd_agg['diag.avg'] * clr.binsize
-	lb_slopes_agg['s_bp'] = lb_slopes_agg['diag.avg'] * clr.binsize
+	lb_cvd_agg['s_bp'] = lb_cvd_agg['dist.avg'] * clr.binsize
+	lb_slopes_agg['s_bp'] = lb_slopes_agg['dist.avg'] * clr.binsize
 	return aggExpected,lb_slopes_agg

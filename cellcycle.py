@@ -242,10 +242,16 @@ def _contact_describe(pairsf:str,c1=1,p1=2,c2=3,p2=4) -> pd.Series:
     intra = contacts.query(' chr1 == chr2 ')
     distances = abs(intra["pos1"] - intra["pos2"])
     
-    all_ = len(distances[23_000 < distances])
-    short = len(distances[(23_000 < distances) & (distances < 2_000_000)])
-    mitotic = len(distances[(2_000_000 < distances) & (distances < 12_000_000)])
-    farAvg = distances[(4_500_000 < distances) & (distances < 225_000_000)]
+    all_ = len(distances[10374 < distances])
+    #short = len(distances[(23_000 < distances) & (distances < 2_000_000)])
+    #mitotic = len(distances[(2_000_000 < distances) & (distances < 12_000_000)])
+    #farAvg = distances[(4_500_000 < distances) & (distances < 225_000_000)]
+    #short = len(distances[(165995 < distances) & (distances < 861077)])
+    #mitotic = len(distances[(8192000 < distances) & (distances < 27554493)])
+    
+    short = len(distances[(10374 < distances) & (distances < 3158447)])
+    mitotic = len(distances[(9741984 < distances) & (distances < 35733757)])
+    farAvg = distances[(27554493 < distances) & (distances < 225_000_000)]
     
     mitotic_r = mitotic/all_
     short_r = short/all_
