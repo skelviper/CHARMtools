@@ -18,7 +18,7 @@ theme_Publication <- function(base_size=14, base_family="helvetica") {
                axis.title = element_text(face = "bold",size = rel(1)),
                axis.title.y = element_text(angle=90,vjust =2),
                #axis.title.x = element_text(vjust = -0.2),
-               #axis.title.x = element_blank(),
+               #axis.title.x = element_blank(),z
                axis.text = element_text(), 
                axis.line = element_line(colour="black"),
                axis.ticks = element_line(),
@@ -29,7 +29,7 @@ theme_Publication <- function(base_size=14, base_family="helvetica") {
                legend.position = "bottom",
                legend.direction = "horizontal",
                legend.key.size= unit(0.6, "cm"),
-               legend.margin = unit(0, "cm"),
+#               legend.margin = margin(0, "cm"),
                #legend.title = element_text(face="italic"),
                legend.title = element_blank(),
                plot.margin=unit(c(10,5,5,5),"mm"),

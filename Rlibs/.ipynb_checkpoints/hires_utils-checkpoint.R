@@ -6,13 +6,16 @@ library(Matrix)
 readcolor2 <- function(color2_dir, chrList, splitname = ".pairs"){
     file_names <- dir(color2_dir, pattern = "*.color", recursive = F, full.names = T)
     # read color2 files and return a dataframe
-    df <- read_table2(file_names[1],col_names = F,col_types = cols(X1=col_character(),X2=col_double(),X3 = col_double())) %>% filter(X1 %in% chrList)
+    df <- read_table(file_names[1],col_names = F,col_types = cols(X1=col_character(),X2=col_double(),X3 = col_double())) %>% filter(X1 %in% chrList)
     df $ X1 <-as.character(df $ X1)
     names(df)<-c("chr","bin",strsplit(tail(strsplit(file_names[1],split="/")[[1]],1),split=splitname)[[1]][1])
     #print(df)
     # combine from second
     for (i in 2:length(file_names)) {
-        newdf <- read_table2(file_names[i],,col_names = F,col_types = cols(X1=col_character(),X2=col_double(),X3 = col_double())) 
+        if(i %% 100 == 0){
+            print(paste0("Read ",i," cells done!"))
+        }
+        newdf <- read_table(file_names[i],,col_names = F,col_types = cols(X1=col_character(),X2=col_double(),X3 = col_double())) 
         if (dim(newdf)[1]<5){
             next
         }

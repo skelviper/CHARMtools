@@ -242,7 +242,7 @@ def _contact_describe(pairsf:str,c1=1,p1=2,c2=3,p2=4) -> pd.Series:
     intra = contacts.query(' chr1 == chr2 ')
     distances = abs(intra["pos1"] - intra["pos2"])
     
-    all_ = len(distances[10374 < distances])
+    all_ = len(distances[23_000 < distances])
     short = len(distances[(23_000 < distances) & (distances < 2_000_000)])
     mitotic = len(distances[(2_000_000 < distances) & (distances < 12_000_000)])
     farAvg = distances[(4_500_000 < distances) & (distances < 225_000_000)]
