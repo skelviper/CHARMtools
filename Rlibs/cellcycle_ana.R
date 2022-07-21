@@ -17,15 +17,15 @@ getCelltypeOrder <- function(obj,ct,sample_number = NULL){
     
     mat <- obj[["cdps"]]@data %>% as.matrix() 
     if(is.null(sample_number)){
-        tempOrderDF <- obj@meta.data %>% filter(cellcycle_threshold != "G0",cellcycle_threshold != "M") %>% filter(eval(parse(text=ct))) 
+        tempOrderDF <- obj@meta.data %>% filter(eval(parse(text=ct))) 
     }
     else{
-        tempOrderDF <- obj@meta.data %>% filter(cellcycle_threshold != "G0",cellcycle_threshold != "M") %>% filter(eval(parse(text=ct)))%>% sample_n(sample_number)
+        tempOrderDF <- obj@meta.data %>% filter(eval(parse(text=ct)))%>% sample_n(sample_number)
     }
     
     #dim(tempOrderDF) %>% print()
     tempOrderDF <- tempOrderDF %>% mutate(clusterOrder = str_replace(paste0(str_replace(celltype," ","_"),"_",cluster,"_",sub_k_cluster),"_sub_",""))
-    tempOrderDF$cellcycle_threshold <- factor(tempOrderDF$cellcycle_threshold,levels = c("G1","Early-S","Mid-S","Late-S","G2","M"))
+    tempOrderDF$cellcycle_threshold <- factor(tempOrderDF$cellcycle_threshold,levels = c("G0","M","G1","Early-S","Mid-S","Late-S","G2"))
     tempMat <- tempOrderDF %>% select(cellname,clusterOrder)%>% left_join(mat %>% t() %>% as.data.frame() %>% rownames_to_column("cellname")) %>% 
         group_by(clusterOrder) %>% select(-cellname) %>% summarise_all(mean) %>% na.omit() %>% ungroup() %>% column_to_rownames("clusterOrder")
 
@@ -83,7 +83,8 @@ align_cellcycle <- function(obj,celltype1,celltype2,numPts = 50,sample_number = 
     }
     temp <- metaNodePtLong %>% filter(variable != "diff") %>% left_join(ref_annotation %>% group_by(cellcycle_ref) %>% mutate(rank_ref = row_number() / n())) %>%
                                                       left_join(query_annotation %>% group_by(cellcycle_query) %>% mutate(rank_query = row_number() / n())) %>% 
-         rowwise() %>% mutate(shift = rank_ref + lev2num(cellcycle_ref) - rank_query - lev2num(cellcycle_query)) %>% 
+         rowwise() %>% mutate(shift = rank_ref + lev2num(cellcycle_ref) - rank_query - lev2num(cellcycle_query),
+                              shift_old = lev2num(cellcycle_ref) - lev2num(cellcycle_query)) %>% 
         mutate(cellcycle = ifelse(variable == "ptQuery",as.character(cellcycle_query),as.character(cellcycle_ref))) %>% 
         mutate(variable = ifelse(variable == "ptQuery",str_extract(celltype1,pattern = '(?<=")[A-Za-z0-9 ]+(?=")'),str_extract(celltype2,pattern = '(?<=")[A-Za-z0-9 ]+(?=")')))
 
@@ -94,8 +95,7 @@ align_cellcycle <- function(obj,celltype1,celltype2,numPts = 50,sample_number = 
             coord_flip() + ggtitle("meta-nodes alignment")  + theme_Publication()#+ scale_color_manual(values = cellcyclecolors)
 
     # draw histogram
-    mean_num_old <- temp %>% rowwise() %>%  mutate(shift = lev2num(cellcycle_ref) - lev2num(cellcycle_query)) %>% pull(shift) %>% mean()
-
+    mean_num_old <- temp %>% pull(shift_old) %>% mean()
     mean_num <- temp %>% pull(shift) %>% mean()
 
     histogram_plot <- temp %>% gghistogram(x="shift",bins= 16) + theme_Publication() + xlab(paste0("shift (mean = ",round(mean_num,3),")")) + scale_x_continuous(limits = c(-2,2))
@@ -103,13 +103,15 @@ align_cellcycle <- function(obj,celltype1,celltype2,numPts = 50,sample_number = 
     #print(mean_num)
     p_return <- (alignment_plot | histogram_plot) + plot_layout(widths = c(2, 1))
 
-    return(c(list(p_return),mean_num,list(temp)))
+    return(c(list(p_return),mean_num,list(temp),mean_num_old))
 }
 
 # plot cdps heatmap
 plotCdpsHeatmap <- function(obj,ct){
+    colors <-c("#f7fbff","#deebf7","#c6dbef","#9ecae1","#6baed6","#4292c6","#2171b5","#084594")
     order = getCelltypeOrder(obj,ct = ct)
     tempOrderDF = obj[[]][order,]
+    mat = obj[["cdps"]]@data %>% as.matrix %>% as.data.frame()
     heatmap_mat <- mat[,order] %>% as.data.frame
     heatmap_mat[heatmap_mat > 0.025] <- 0.025
 
@@ -143,7 +145,7 @@ plotCdpsHeatmap <- function(obj,ct){
 #example of use this funciton
 #tanay_res <- comp_score(pairsPaths,defineAB,method = "tanay",threads = 200)
 
-calcCompScore <- function(pairsPaths,defineAB,method = "tanay",threads = 100，bedtoolsPath = "~/miniconda3/envs/py3/bin/"){
+calcCompScore <- function(pairsPaths,defineAB,method = "tanay",threads = 100,bedtoolsPath = "~/miniconda3/envs/py3/bin/"){
     registerDoParallel(threads)
     result <- foreach(filepath=pairsPaths , .combine="rbind", .packages=c("tidyverse","bedtoolsr")) %dopar% {
         options(bedtools.path = bedtoolsPath)

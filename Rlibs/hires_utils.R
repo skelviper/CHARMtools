@@ -2,6 +2,14 @@
 library(tidyverse)
 library(Matrix)
 
+# io functions
+# read 4DN pairs file and return a dataframe
+readPairs <- function(pairPath){
+    pairs <- read_table(pairPath,col_names = FALSE, comment = "#") %>% select(1:5)
+    names(pairs) <- c("readID","chrom1","pos1","chrom2","pos2")
+    return(pairs)
+}
+
 # funcitons for CpG Clustering
 readcolor2 <- function(color2_dir, chrList, splitname = ".pairs"){
     file_names <- dir(color2_dir, pattern = "*.color", recursive = F, full.names = T)
