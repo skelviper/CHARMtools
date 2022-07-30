@@ -39,7 +39,7 @@ BiRD <- function(mat1,mat2,bintable,resolution=20000,bins=50,chunk_size=4000,alp
     split_num = floor(dim(mat1)[1] / chunk_size)
     alpha = 1- (1-alpha) ** (1/split_num)
     set.seed(42)
-    registerDoParallel(60)
+    registerDoParallel(threads)
     result <- foreach(i = seq(split_num), .combine = "c",.errorhandling = "pass") %dopar% 
     {   
         tempres <- list(SigDetDCF(t(mat1[((i-1)*chunk_size + 1):(i * chunk_size),]), t(mat2[((i-1)*chunk_size + 1):(i * chunk_size),]), foldlen = 4096, trunc = 0, MB = 1000, alpha = alpha, ReMax = 10, COMPU = 'Point', Pvm = 'Asy'))
@@ -77,7 +77,7 @@ BiRD <- function(mat1,mat2,bintable,resolution=20000,bins=50,chunk_size=4000,alp
     names(location) <- c("name","pos")
     diff_value <- rowSums(mat1) / dim(mat1)[2] - rowSums(mat2) / dim(mat2)[2]
     differences <- location %>% right_join(differences) %>% separate(name,into = c("chrom1","start1","start2")) %>% 
-        mutate(start1=as.numeric(start1),start2=as.numeric(start2),chrom2 = chrom1,end1 = start1+ resolution,end2 = start2+resolution)
+        mutate(start1=as.numeric(start1) - 1/2 * resolution,start2=as.numeric(start2) - 1/2 * resolution,chrom2 = chrom1,end1 = start1+ resolution,end2 = start2+resolution)
     diff_value <- diff_value %>% as.data.frame() %>% mutate(row_number())
     names(diff_value) <- c("diff","pos")
 
