@@ -54,17 +54,16 @@ d3Dtest <- function(x,y,method = "chi-square"){
     return(p)
 }
 
-d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method = "BH",fdr_thres = 0.05,test.method = "chi-square"){
+d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method = "BH",fdr_thres = 0.05,test.method = "chi-square",resolution = 20000){
     library(furrr)
     plan(multicore, workers = threads)
     options(future.globals.maxSize = 320000000000)
 
-    diff_raw <- future_map(seq(ncol(mat1)), function(x) d3D(mat1[,x], mat2[,x],method = test.method))
+    diff_raw <- future_map(seq(ncol(mat1)), function(x) d3Dtest(mat1[,x], mat2[,x],method = test.method))
 
-    resolution = 20000
     diff_format <- cbind(binnames,diff_raw %>% unlist() %>% as.numeric() %>% as.data.frame())
     names(diff_format) <- c("pos","pv")
-    diff_format <- diff_format %>% mutate(FDR = p.adjust(pv,method = method))
+    diff_format <- diff_format %>% mutate(FDR = p.adjust(pv,method = p.adj.method))
     diff <- (colSums(mat1) / dim(mat1)[1]) - (colSums(mat2) / dim(mat2)[1])
     diff_format <- cbind(diff_format,diff)
     sig <- diff_format %>% filter(FDR < fdr_thres) %>% separate(pos, into = c("chrom1","pos1","pos2")) %>% 
