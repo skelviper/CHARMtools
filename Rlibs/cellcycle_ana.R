@@ -41,6 +41,7 @@ getCelltypeOrder <- function(obj,ct,sample_number = NULL){
 }
 
 align_cellcycle <- function(obj,celltype1,celltype2,numPts = 50,sample_number = NULL){
+    mat <- obj[["cdps"]]@data %>% as.matrix() 
     traj_celltype1 <- getCelltypeOrder(obj = obj,ct = celltype1,sample_number = sample_number)%>% as.data.frame() %>% mutate(order = row_number() / n()) %>% deframe()
     traj_celltype2 <- getCelltypeOrder(obj = obj,ct = celltype2,sample_number = sample_number)%>% as.data.frame() %>% mutate(order = row_number() / n()) %>% deframe()
 
