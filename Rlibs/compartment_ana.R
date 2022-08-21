@@ -24,7 +24,8 @@ getCpGDiffVocanoPlotData <- function(hires,ident1,ident2,genes,resolution=100000
     diff_SCT <- FindMarkers(hires,`ident.1` = ident1,`ident.2` = ident2,only.pos = TRUE)
     RNAmarkers <- rownames(diff_SCT %>% arrange(p_val_adj) %>% head(100))
     
-    plotData <- genes %>% mutate(pos = floor(((start+end)/2+resolution/2)/resolution)*resolution) %>% right_join(cpg_diff) %>% mutate(log_p_val= -log10(p_val))
+    #$plotData <- genes %>% mutate(pos = floor(((start+end)/2+resolution/2)/resolution)*resolution) %>% right_join(cpg_diff) %>% mutate(log_p_val= -log10(p_val))
+    plotData <- genes %>% mutate(pos = floor(((start+end)/2)/resolution)*resolution) %>% right_join(cpg_diff) %>% mutate(log_p_val= -log10(p_val))
     plotData <- plotData %>% full_join(tibble(name=RNAmarkers,type="Marker")) %>% filter(!is.na(chr))
     plotData$type[is.na(plotData$type)] <- "Other"
     

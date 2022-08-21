@@ -66,7 +66,8 @@ d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method =
     names(diff_format) <- c("pos","pv")
     diff_format <- diff_format %>% mutate(FDR = p.adjust(pv,method = p.adj.method))
     diff <- (colSums(mat1) / dim(mat1)[1]) - (colSums(mat2) / dim(mat2)[1])
-    diff_format <- cbind(diff_format,diff)
+    lg2fc <- log2((colSums(mat1) / dim(mat1)[1]) / (colSums(mat2) / dim(mat2)[1]))
+    diff_format <- cbind(diff_format,diff,lg2fc)
     sig <- diff_format %>% filter(FDR < fdr_thres) %>% separate(pos, into = c("chrom1","pos1","pos2")) %>% 
         mutate(start1 = as.numeric(pos1) - resolution /2,start2 = as.numeric(pos2) - resolution / 2,
                 end1 = start1 + resolution,end2 = start2 + resolution,chrom2 = chrom1) %>% 
@@ -110,4 +111,22 @@ count_contacts_in_region <- function(pairsPath,regions){
     res[is.na(res)] <- 0
     
     return(res)
+}
+
+cluster_difference <- function(differences,resolution = 20000,flank_size = 1){
+    differences_cluster <- differences %>% select(1:6) %>% bt.cluster(d = flank_size*resolution) %>% select(V4,V5,V6,everything()) %>%
+        bt.sort() %>% bt.cluster(d=flank_size*resolution ) %>% group_by(V7,V8) %>% mutate(cluster= cur_group_id()) %>% 
+        ungroup() %>% select(4:6,1:3,cluster)
+    names(differences_cluster) <- c(names(differences %>% select(1:6)),"cluster")
+    differences_cluster <- cbind(differences_cluster,diff_neuron_mesenchyme %>% select(-c(1:6)) )        
+    
+    return(differences_cluster)
+}
+
+flank_bedpe <- function(bedpe, flank = 20000){
+    temp <- bedpe %>% select(1:6)
+    names(temp) <- c("chrom1","start1","end1","chrom2","start2","end2")
+    temp <- temp %>% mutate(start1 = start1 - flank, end1 = end1 + flank, start2 = start2 - flank, end2 = end2 + flank)
+    #bedpe <- bedpe %>% mutate(start = start - flank, end = end + flank)
+    return(cbind(temp,bedpe %>% select(-c(1:6))))
 }
