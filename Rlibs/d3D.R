@@ -118,7 +118,7 @@ cluster_difference <- function(differences,resolution = 20000,flank_size = 1){
         bt.sort() %>% bt.cluster(d=flank_size*resolution ) %>% group_by(V7,V8) %>% mutate(cluster= cur_group_id()) %>% 
         ungroup() %>% select(4:6,1:3,cluster)
     names(differences_cluster) <- c(names(differences %>% select(1:6)),"cluster")
-    differences_cluster <- cbind(differences_cluster,diff_neuron_mesenchyme %>% select(-c(1:6)) )        
+    differences_cluster <- cbind(differences_cluster,differences %>% select(-c(1:6)) )        
     
     return(differences_cluster)
 }
