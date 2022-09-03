@@ -1,26 +1,45 @@
 # Functions for Difference detechtion
 
-load_mat <- function(filepaths,bintable,threads = 40){
+load_mat <- function(filepaths,bintable,threads = 40,type="center"){
     registerDoParallel(threads)
     mat <- foreach(filepath = filepaths ,.combine = "cbind",.errorhandling = "remove") %dopar%{
         example <- fread(filepath,header = FALSE,tmpdir = "./",col.names = c("chrom","pos1","chrom2","pos2","distance"))
-        #example <- example %>% mutate(band = pos2-pos1) %>% group_by(band) %>% 
-            #mutate(distance_adj = scale(distance))
-            #mutate(aveDistance = ave(distance), distance_adj = distance - aveDistanc)
-            #mutate(aveDistance = ave(distance), distance_adj = distance)
-        example <- bintable %>% left_join(example) %>% select(chrom,pos1,pos2,distance)
-        example[is.na(example)] <- 10
-        example <- cbind(example %>% head(dim(example)[1] / 2), example %>% tail(dim(example)[1] / 2) %>% select(distance)) 
-        names(example)[5] <- "distance2"
-        gc()
-        example %>% select(distance,distance2)
+
+        if(type == "center"){
+            example <- example %>% mutate(band = pos2-pos1) %>% group_by(band) %>% 
+            mutate(aveDistance = mean(distance,na.rm = T), distance_adj = distance - aveDistance)
+            example <- bintable %>% left_join(example) %>% select(chrom, 
+                pos1, pos2, distance_adj)
+            example[is.na(example)] <- 0
+            example <- cbind(example %>% head(dim(example)[1]/2), 
+                example %>% tail(dim(example)[1]/2) %>% select(distance_adj))
+            names(example)[5] <- "distance2"
+            gc()
+            example %>% select(distance_adj, distance2)
+        }
+        else{
+            example <- bintable %>% left_join(example) %>% select(chrom,pos1,pos2,distance)
+            example[is.na(example)] <- 10
+            example <- cbind(example %>% head(dim(example)[1] / 2), example %>% tail(dim(example)[1] / 2) %>% select(distance)) 
+            names(example)[5] <- "distance2"
+            gc()
+            example %>% select(distance,distance2)
+        }
+        
     }
     return(as.matrix(mat))
 }
 
-convert_mat_to_contacts <- function(mat){
-    mat[mat <= 3] <- 1
-    mat[mat > 3] <- 0
+convert_mat_to_contacts <- function(mat,type="center"){
+    if(type == "center"){
+        mat[mat > 0] <- 0
+        mat[mat < 0] <- 1
+    }
+    else{
+        mat[mat <= 3] <- 1
+        mat[mat > 3] <- 0
+    }
+
     mode(mat) <- "integer"
     return(mat)
 }
@@ -59,6 +78,7 @@ d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method =
     library(furrr)
     plan(multicore, workers = threads)
     options(future.globals.maxSize = 320000000000)
+    options(scipen = 99999)
 
     diff_raw <- future_map(seq(ncol(mat1)), function(x) d3Dtest(mat1[,x], mat2[,x],method = test.method))
 
