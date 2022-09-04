@@ -7,10 +7,11 @@ load_mat <- function(filepaths,bintable,threads = 40,type="center"){
 
         if(type == "center"){
             example <- example %>% mutate(band = pos2-pos1) %>% group_by(band) %>% 
-            mutate(aveDistance = mean(distance,na.rm = T), distance_adj = distance - aveDistance)
+            #mutate(aveDistance = mean(distance,na.rm = T), distance_adj = distance - aveDistance)
+            mutate(distance_adj = as.vector(scale(distance)))
             example <- bintable %>% left_join(example) %>% select(chrom, 
                 pos1, pos2, distance_adj)
-            example[is.na(example)] <- 0
+            #example[is.na(example)] <- 0
             example <- cbind(example %>% head(dim(example)[1]/2), 
                 example %>% tail(dim(example)[1]/2) %>% select(distance_adj))
             names(example)[5] <- "distance2"
@@ -55,26 +56,40 @@ project1D <- function(bedpe){
     return(all)
 }
 
-d3Dtest <- function(x,y,method = "chi-square"){
-    # wrapper for test on single loci
-    dfy <- as.data.frame(table(y))
-    names(dfy) <- c("type","Freq")
-    dfx <- as.data.frame(table(x))
-    names(dfx) <- c("type","Freq")
+ttest <- function(...) {
+    # R original test cant handle data exactily same.
+   obj<-try(t.test(...), silent=TRUE)
+   if (is(obj, "try-error")) return(1) else return(obj$p.value)
+}
 
-    mat <- data.frame(type = factor(c(0,1))) %>% left_join(dfx,by="type") %>% left_join(dfy,by="type")
-    mat <- mat[,2:3]
-    mat[is.na(mat)] <- 0
-    if (method == "chi-square"){
-        p <- chisq.test(mat)$p.value %>% suppressWarnings()
+d3Dtest <- function(x,y,method = "t"){
+    # wrapper for test on single loci
+    # supported methods: chi-square, t, fisher.test
+
+    if(method == "t"){
+        p <- ttest(x,y)
     }
     else{
-        p <- fisher.test(mat)$p.value %>% suppressWarnings()
+        dfy <- as.data.frame(table(y))
+        names(dfy) <- c("type","Freq")
+        dfx <- as.data.frame(table(x))
+        names(dfx) <- c("type","Freq")
+
+        mat <- data.frame(type = factor(c(0,1))) %>% left_join(dfx,by="type") %>% left_join(dfy,by="type")
+        mat <- mat[,2:3]
+        mat[is.na(mat)] <- 0
+        if (method == "chi-square"){
+            p <- chisq.test(mat)$p.value %>% suppressWarnings()
+        }
+        else{
+            p <- fisher.test(mat)$p.value %>% suppressWarnings()
+        }
     }
+
     return(p)
 }
 
-d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method = "BH",fdr_thres = 0.05,test.method = "chi-square",resolution = 20000){
+d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method = "BH",fdr_thres = 0.05,test.method = "t",resolution = 20000){
     library(furrr)
     plan(multicore, workers = threads)
     options(future.globals.maxSize = 320000000000)
@@ -85,9 +100,8 @@ d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method =
     diff_format <- cbind(binnames,diff_raw %>% unlist() %>% as.numeric() %>% as.data.frame())
     names(diff_format) <- c("pos","pv")
     diff_format <- diff_format %>% mutate(FDR = p.adjust(pv,method = p.adj.method))
-    diff <- (colSums(mat1) / dim(mat1)[1]) - (colSums(mat2) / dim(mat2)[1])
-    lg2fc <- log2((colSums(mat1) / dim(mat1)[1]) / (colSums(mat2) / dim(mat2)[1]))
-    diff_format <- cbind(diff_format,diff,lg2fc)
+    diff <- colMeans(mat1,na.rm=TRUE) - colMeans(mat2,na.rm=TRUE)
+    diff_format <- cbind(diff_format,diff)
     sig <- diff_format %>% filter(FDR < fdr_thres) %>% separate(pos, into = c("chrom1","pos1","pos2")) %>% 
         mutate(start1 = as.numeric(pos1) - resolution /2,start2 = as.numeric(pos2) - resolution / 2,
                 end1 = start1 + resolution,end2 = start2 + resolution,chrom2 = chrom1) %>% 
