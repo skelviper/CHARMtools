@@ -100,7 +100,10 @@ d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method =
     diff_format <- cbind(binnames,diff_raw %>% unlist() %>% as.numeric() %>% as.data.frame())
     names(diff_format) <- c("pos","pv")
     diff_format <- diff_format %>% mutate(FDR = p.adjust(pv,method = p.adj.method))
-    diff <- colMeans(mat1,na.rm=TRUE) - colMeans(mat2,na.rm=TRUE)
+    #diff <- colMeans(mat1,na.rm=TRUE) - colMeans(mat2,na.rm=TRUE)
+    ave_celltype1 <- colMeans(mat1,na.rm=TRUE)
+    ave_celltype2 <- colMeans(mat2,na.rm=TRUE)
+    diff <- ave_celltype1 - ave_celltype2
     diff_format <- cbind(diff_format,diff)
     sig <- diff_format %>% filter(FDR < fdr_thres) %>% separate(pos, into = c("chrom1","pos1","pos2")) %>% 
         mutate(start1 = as.numeric(pos1) - resolution /2,start2 = as.numeric(pos2) - resolution / 2,
