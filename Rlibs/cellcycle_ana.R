@@ -8,6 +8,8 @@ library(circlize)
 library(ComplexHeatmap)
 library(DescTools)
 
+cellcyclecolors = c("G0"="#762a83","G1"="#c2a5cf","Early-S"="#99d8c9","Mid-S"="#66c2a4","Late-S"="#41ae76","G2"="#238b45","M"="#ea6e34")
+
 # functions for align two group of cell and compare cdps, adapt from cellAlign, NatMethod 2018
 getCelltypeOrder <- function(obj,ct,sample_number = NULL){
     # order cellcycle using adapted Tanay's method(Nagano et al. 2017)
@@ -104,7 +106,7 @@ align_cellcycle <- function(obj,celltype1,celltype2,numPts = 50,sample_number = 
     #print(mean_num)
     p_return <- (alignment_plot | histogram_plot) + plot_layout(widths = c(2, 1))
 
-    return(c(list(p_return),mean_num,list(temp),mean_num_old))
+    return(c(list(p_return),mean_num,list(metaNodePt),list(alignment),list(mapping)))
 }
 
 # plot cdps heatmap
@@ -133,3 +135,22 @@ plotCdpsHeatmap <- function(obj,ct){
     return(p)
 }
 
+# select comparable cells before use d3d
+# usage:  
+# sample_cell <- align_sample_cell(G0_align_res[[3]],G0_align_res[[4]],G0_align_res[[5]])
+# celltype1_names_align <- sample_cell[[1]]
+# celltype2_names_align <- sample_cell[[2]]
+align_sample_cell <- function(metaNodePt,alignment,mapping,numPts = 50){
+    localcost <- matrix(alignment$localCostMatrix,nrow = numPts) %>% as.data.frame() 
+    names(localcost) <- names(mapping$refAssign)
+    rownames(localcost) <- names(mapping$queryAssign)
+    localcost <- localcost %>% rownames_to_column("metaNodeQuery") %>% gather(metaNodeRef,cost,-metaNodeQuery)
+    sub_metanode <- metaNodePt %>% left_join(localcost) %>% group_by(metaNodeRef) %>% arrange(cost) %>% slice(1) %>% 
+        group_by(metaNodeQuery) %>% arrange(cost) %>% slice(1)
+    metaNodeQuery_name <- sub_metanode %>% pull(metaNodeQuery)
+    metaNodeRef_name <- sub_metanode %>% pull(metaNodeRef)
+    
+    ref_cellname_align <- mapping$refAssign %>% t() %>% t() %>% as.data.frame() %>% rownames_to_column("metanode") %>% unnest(V1) %>% filter(metanode %in% metaNodeRef_name) %>% pull(V1) 
+    query_cellname_align <- mapping$queryAssign %>% t() %>% t() %>% as.data.frame() %>% rownames_to_column("metanode") %>% unnest(V1) %>% filter(metanode %in% metaNodeQuery_name) %>% pull(V1) 
+    return(list(query_cellname_align,ref_cellname_align))
+}

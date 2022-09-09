@@ -1,12 +1,16 @@
+library(foreach)
+library(doParallel)
+library(data.table)
 # Functions for Difference detechtion
 
 load_mat <- function(filepaths,bintable,threads = 40,type="center"){
     registerDoParallel(threads)
+    names(bintable) <- c("chrom","pos1","chrom2","pos2")
     mat <- foreach(filepath = filepaths ,.combine = "cbind",.errorhandling = "remove") %dopar%{
         example <- fread(filepath,header = FALSE,tmpdir = "./",col.names = c("chrom","pos1","chrom2","pos2","distance"))
 
         if(type == "center"){
-            example <- example %>% mutate(band = pos2-pos1) %>% group_by(band) %>% 
+            example <- example %>% mutate(band = pos2-pos1) %>% group_by(chrom,band) %>% 
             #mutate(aveDistance = mean(distance,na.rm = T), distance_adj = distance - aveDistance)
             mutate(distance_adj = as.vector(scale(distance)))
             example <- bintable %>% left_join(example) %>% select(chrom, 
@@ -20,7 +24,7 @@ load_mat <- function(filepaths,bintable,threads = 40,type="center"){
         }
         else{
             example <- bintable %>% left_join(example) %>% select(chrom,pos1,pos2,distance)
-            example[is.na(example)] <- 10
+            #example[is.na(example)] <- 10
             example <- cbind(example %>% head(dim(example)[1] / 2), example %>% tail(dim(example)[1] / 2) %>% select(distance)) 
             names(example)[5] <- "distance2"
             gc()
@@ -30,6 +34,7 @@ load_mat <- function(filepaths,bintable,threads = 40,type="center"){
     }
     return(as.matrix(mat))
 }
+
 
 convert_mat_to_contacts <- function(mat,type="center"){
     if(type == "center"){
@@ -59,7 +64,8 @@ project1D <- function(bedpe){
 ttest <- function(...) {
     # R original test cant handle data exactily same.
    obj<-try(t.test(...), silent=TRUE)
-   if (is(obj, "try-error")) return(1) else return(obj$p.value)
+   #if (is(obj, "try-error")) return(c(0,1)) else return(as.numeric(c(obj$statistic,obj$p.value)))
+    if (is(obj, "try-error")) return(1) else return(obj$p.value)
 }
 
 d3Dtest <- function(x,y,method = "t"){
