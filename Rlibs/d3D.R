@@ -156,15 +156,32 @@ count_contacts_in_region <- function(pairsPath,regions){
     return(res)
 }
 
-cluster_difference <- function(differences,resolution = 20000,flank_size = 1){
-    differences_cluster <- differences %>% select(1:6) %>% bt.cluster(d = flank_size*resolution) %>% select(V4,V5,V6,everything()) %>%
-        bt.sort() %>% bt.cluster(d=flank_size*resolution ) %>% group_by(V7,V8) %>% mutate(cluster= cur_group_id()) %>% 
-        ungroup() %>% select(4:6,1:3,cluster)
-    names(differences_cluster) <- c(names(differences %>% select(1:6)),"cluster")
-    differences_cluster <- cbind(differences_cluster,differences %>% select(-c(1:6)) )        
+# BAD FUNCTION!!!!!!!!!!!!!
+# Unknown bug cause output to be wrong
+# cluster_difference <- function(differences,resolution = 20000,flank_size = 1){
+#     differences_cluster <- differences %>% select(1:6) %>% bt.cluster(d = flank_size*resolution) %>% select(V4,V5,V6,everything()) %>%
+#         bt.sort() %>% bt.cluster(d=flank_size*resolution ) %>% group_by(V7,V8) %>% mutate(cluster= cur_group_id()) %>% 
+#         ungroup() %>% select(4:6,1:3,cluster)
+#     names(differences_cluster) <- c(names(differences %>% select(1:6)),"cluster")
+#     differences_cluster <- cbind(differences_cluster,differences %>% select(-c(1:6)) )        
     
-    return(differences_cluster)
+#     return(differences_cluster)
+# }
+
+# cluster bedpe file using valr based on the first 6 colunms
+cluster_bedpe <- function(cluster_temp,flank = 20000){
+    names(cluster_temp)[1:3] <- c("chrom","start","end")
+    cluster_temp <- cluster_temp %>% valr::bed_cluster(max_dist = flank)
+    names(cluster_temp)[1:6] <- c("chrom1","start1","end1","chrom","start","end")
+    names(cluster_temp)[length(names(cluster_temp))] <- "idleft"
+    cluster_temp <- cluster_temp %>% valr::bed_cluster(max_dist = flank)
+    names(cluster_temp)[4:6] <- c("chrom2","start2","end2")
+    names(cluster_temp)[length(names(cluster_temp))] <- "idright"
+    cluster_temp <- cluster_temp %>% group_by(idleft,idright) %>% mutate(cluster_id = cur_group_id())%>% ungroup() %>% select(-idleft,-idright) 
+    return(cluster_temp)
 }
+
+
 
 flank_bedpe <- function(bedpe, flank = 20000){
     temp <- bedpe %>% select(1:6)
