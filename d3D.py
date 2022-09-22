@@ -1,4 +1,7 @@
 
+import cooler
+import pandas as pd
+
 def ratings_norm(df):
     min_value = df["distance"].min()
     max_value = df["distance"].max()
@@ -9,15 +12,18 @@ def ratings_norm(df):
 
     return df
 
-def read_file(filepath, bintable, type="center", chrom="chr1"):
-    import cooler
-    import pandas as pd
+#def read_file(filepath, bintable, type="center", chrom="chr1"):
+def read_file(filepath,bintable,type="center",chrom="chr1",start=None,end=None):
 
     c = cooler.Cooler(filepath)  # 用cooler读入
 
     # 读入并fetch数据量减小
-    mat = c.pixels(join=True).fetch(region=(chrom + 'mat'))
-    pat = c.pixels(join=True).fetch(region=(chrom + 'pat'))
+    if(start):
+        mat = c.pixels(join=True).fetch(region=(chrom + 'mat'))
+        pat = c.pixels(join=True).fetch(region=(chrom + 'pat'))
+    else:
+        mat = c.pixels(join=True).fetch(region=(chrom + 'mat', start, end))
+        pat = c.pixels(join=True).fetch(region=(chrom + 'pat', start, end))
     example = pd.concat([mat, pat], axis=0).rename(columns={"count": "distance", "chrom1": "chrom"})
 
     example['pos1'] = ((example['start1'] + example['end1']) / 2).astype(int)
@@ -49,11 +55,9 @@ def read_file(filepath, bintable, type="center", chrom="chr1"):
         example = example[['distance', 'distance2', "raw", "raw2"]]  # 只取distance1和distance2
 
     else:
-
         # 和bintable进行merge
-
-        example = pd.merge(bintable, example, how='left', on=["pos1", "pos2"])[
-            ['chrom_x', 'pos1', 'pos2', 'distance']].rename(columns={"chrom_x": "chrom"})
+        example = pd.merge(bintable, example, how='left', on=["chrom","pos1", "pos2"])[
+            ['chrom', 'pos1', 'pos2', 'distance']]
 
         example = example[['chrom', 'pos1', 'pos2', 'distance']]
 
@@ -68,7 +72,7 @@ def read_file(filepath, bintable, type="center", chrom="chr1"):
     return example
 
 
-def load_mat(filepaths, bintable, threads=40, type="center", chrom="chr1(mat)"):
+def load_mat(filepaths, bintable, threads=40, type="center", chrom="chr1(mat)",start = None,end = None):
     # 多进程
     from multiprocessing import Process, Manager, Pool
     import pandas as pd
@@ -80,7 +84,7 @@ def load_mat(filepaths, bintable, threads=40, type="center", chrom="chr1(mat)"):
     data = pd.DataFrame()
 
     for file_name in filepaths:
-        pool_data_list.append(pool.apply_async(read_file, (file_name, bintable, type, chrom)))
+        pool_data_list.append(pool.apply_async(read_file, (file_name, bintable, type, chrom,start,end)))
 
     pool.close()
     pool.join()
@@ -136,11 +140,12 @@ def d3Dtest(data, method='t', m=100):
 
 
 def d3D(mat1, mat2, bintable,adj_method="BH", fdr_thres=0.05, test_method="chi-square", resolution=20000,
-        center="yes"):
+        center="yes",threads=10):
 
     from pandarallel import pandarallel
+    import pandas as pd
     # pandarallel.initialize(progress_bar=True)
-    pandarallel.initialize()
+    pandarallel.initialize(nb_workers=threads)
 
     if (center == "yes"):
 
@@ -189,19 +194,22 @@ def d3D(mat1, mat2, bintable,adj_method="BH", fdr_thres=0.05, test_method="chi-s
     #     sig = sig[sig['FDR'] < fdr_thres]#先不过滤了
 
     # 添加start和end
-    sig['start1'] = (sig['pos'] - resolution / 2).astype(int)
-    sig['end1'] = (sig['pos'] + resolution / 2).astype(int)
-    sig['start2'] = (sig['pos2'] - resolution / 2).astype(int)
-    sig['end2'] = (sig['pos2'] + resolution / 2).astype(int)
+    # sig['start1'] = (sig['pos1'] - resolution / 2).astype(int)
+    # sig['end1'] = (sig['pos1'] + resolution / 2).astype(int)
+    # sig['start2'] = (sig['pos2'] - resolution / 2).astype(int)
+    # sig['end2'] = (sig['pos2'] + resolution / 2).astype(int)
 
-    sig = sig.drop(["pos", "pos2"], axis=1)
+    # sig = sig.drop(["pos", "pos2"], axis=1)
 
     # 根据阈值进行过滤
     # sig = sig[sig['FDR'] < fdr_thres]
 
     return (sig)
 
-def read_bin_file(binpath,chrom):
+# todo:
+# filter chromosome here is not a good idea since we always need to get a specific region in the downstream analysis
+# a test run need 1min29s
+def read_bin_file(binpath,chrom=None,start=None,end=None):
     import pandas as pd
     bintable = pd.read_csv(binpath, sep='\t')
     #去掉括号
@@ -214,9 +222,17 @@ def read_bin_file(binpath,chrom):
     #去掉xy染色体
     bintable = bintable.loc[bintable['chrom'].str.contains('chr[0-9]+')]  # 筛选
 
-    mat = chrom + "mat"
-    pat = chrom + "pat"
-    return (bintable.query("chrom=='{}' | chrom=='{}'".format(mat, pat)))
+    if(chrom):
+        mat = chrom + "mat"
+        pat = chrom + "pat"
+        if(start):
+            start = start - 10000
+            end = end -10000
+            return (bintable.query("(chrom=='{}' | chrom=='{}') & pos1 >= @start & pos2 <=@end".format(mat, pat)))
+        else:
+            return (bintable.query("chrom =='{}' | chrom=='{}'".format(mat, pat)))
+    else:
+        return(bintable)
 
 
 if __name__ == '__main__':

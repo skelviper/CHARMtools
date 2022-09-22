@@ -6,7 +6,7 @@ library(data.table)
 load_mat <- function(filepaths,bintable,threads = 40,type="center"){
     registerDoParallel(threads)
     names(bintable) <- c("chrom","pos1","chrom2","pos2")
-    mat <- foreach(filepath = filepaths ,.combine = "cbind",.errorhandling = "remove") %dopar%{
+    mat <- foreach(filepath = filepaths ,.combine = "cbind",.errorhandling = "stop") %dopar%{
         example <- fread(filepath,header = FALSE,tmpdir = "./",col.names = c("chrom","pos1","chrom2","pos2","distance"))
 
         if(type == "center"){
