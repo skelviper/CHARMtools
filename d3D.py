@@ -13,17 +13,16 @@ def ratings_norm(df):
     return df
 
 #def read_file(filepath, bintable, type="center", chrom="chr1"):
-def read_file(filepath,bintable,type="center",chrom="chr1",start=None,end=None):
+def read_file(filepath,bintable,type="center",chrom="chr18"): #,start=None,end=None):
 
     c = cooler.Cooler(filepath)  # 用cooler读入
 
     # 读入并fetch数据量减小
-    if(start):
-        mat = c.pixels(join=True).fetch(region=(chrom + 'mat'))
-        pat = c.pixels(join=True).fetch(region=(chrom + 'pat'))
-    else:
-        mat = c.pixels(join=True).fetch(region=(chrom + 'mat', start, end))
-        pat = c.pixels(join=True).fetch(region=(chrom + 'pat', start, end))
+    mat = c.pixels(join=True).fetch(region=(chrom + 'mat'))
+    pat = c.pixels(join=True).fetch(region=(chrom + 'pat'))
+    # else:
+    #     mat = c.pixels(join=True).fetch(region=(chrom + 'mat', start, end))
+    #     pat = c.pixels(join=True).fetch(region=(chrom + 'pat', start, end))
     example = pd.concat([mat, pat], axis=0).rename(columns={"count": "distance", "chrom1": "chrom"})
 
     example['pos1'] = ((example['start1'] + example['end1']) / 2).astype(int)

@@ -22,6 +22,19 @@ load_mat <- function(filepaths,bintable,threads = 40,type="center"){
             gc()
             example %>% select(distance_adj, distance2)
         }
+        else if (type == "all") {
+            example <- example %>% mutate(band = pos2-pos1) %>% group_by(chrom,band) %>% 
+            #mutate(aveDistance = mean(distance,na.rm = T), distance_adj = distance - aveDistance)
+            mutate(distance_adj = as.vector(scale(distance)))
+            example <- bintable %>% left_join(example) %>% select(chrom, 
+                pos1, pos2, distance, distance_adj)
+            #example[is.na(example)] <- 0
+            example <- cbind(example %>% head(dim(example)[1]/2) %>% select(distance, distance_adj), 
+                example %>% tail(dim(example)[1]/2) %>% select(distance,distance_adj))
+            names(example) <- c("rawdistance1","scaledistance1","rawdistance2","scaledistance2")
+            gc()
+            example
+        }
         else{
             example <- bintable %>% left_join(example) %>% select(chrom,pos1,pos2,distance)
             #example[is.na(example)] <- 10
@@ -95,7 +108,7 @@ d3Dtest <- function(x,y,method = "t"){
     return(p)
 }
 
-d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method = "BH",fdr_thres = 0.05,test.method = "t",resolution = 20000){
+d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 50,p.adj.method = "BH",filter_type = "pv",filter_thres = 0.05,test.method = "t",resolution = 20000){
     library(furrr)
     plan(multicore, workers = threads)
     options(future.globals.maxSize = 320000000000)
@@ -111,7 +124,13 @@ d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 200,p.adj.method =
     ave_celltype2 <- colMeans(mat2,na.rm=TRUE)
     diff <- ave_celltype1 - ave_celltype2
     diff_format <- cbind(diff_format,diff)
-    sig <- diff_format %>% filter(FDR < fdr_thres) %>% separate(pos, into = c("chrom1","pos1","pos2")) %>% 
+    if (filter_type == "FDR"){
+        diff_format <- diff_format %>% filter(FDR < filter_thres)
+    }
+    else{
+        diff_format <- diff_format %>% filter(pv < filter_thres)
+    }
+    sig <- diff_format %>% separate(pos, into = c("chrom1","pos1","pos2")) %>% 
         mutate(start1 = as.numeric(pos1) - resolution /2,start2 = as.numeric(pos2) - resolution / 2,
                 end1 = start1 + resolution,end2 = start2 + resolution,chrom2 = chrom1) %>% 
         select(chrom1,start1,end1,chrom2,start2,end2,everything())
