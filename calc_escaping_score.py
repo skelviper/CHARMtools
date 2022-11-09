@@ -1,9 +1,9 @@
 from email import parser
-from re import I
 import open3d as o3d
 import numpy as np
 import pandas as pd
 import argparse
+import copy
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-i','--input', type=str, help='input point cloud 3dg file')
@@ -23,7 +23,23 @@ print(f"alpha={alpha:.3f}")
 mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_alpha_shape(pcd, alpha)
 mesh.compute_vertex_normals()
 
-meshn = o3d.t.geometry.TriangleMesh.from_legacy(mesh)
+print("Cluster connected triangles")
+with o3d.utility.VerbosityContextManager(
+        o3d.utility.VerbosityLevel.Debug) as cm:
+    triangle_clusters, cluster_n_triangles, cluster_area = (
+        mesh.cluster_connected_triangles())
+triangle_clusters = np.asarray(triangle_clusters)
+cluster_n_triangles = np.asarray(cluster_n_triangles)
+cluster_area = np.asarray(cluster_area)
+
+print("Meesh with small clusters (<500) will be removed")
+mesh_0 = copy.deepcopy(mesh)
+triangles_to_remove = cluster_n_triangles[triangle_clusters] < 500
+mesh_0.remove_triangles_by_mask(triangles_to_remove)
+
+mesh_0.compute_vertex_normals()
+
+meshn = o3d.t.geometry.TriangleMesh.from_legacy(mesh_0)
 
 # Create a scene and add the triangle mesh
 scene = o3d.t.geometry.RaycastingScene()
