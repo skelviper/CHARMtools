@@ -80,6 +80,10 @@ ttest <- function(...) {
    #if (is(obj, "try-error")) return(c(0,1)) else return(as.numeric(c(obj$statistic,obj$p.value)))
     if (is(obj, "try-error")) return(1) else return(obj$p.value)
 }
+wilcoxtest <- function(...){
+    obj <- try(wilcox.test(...),silent=TRUE) %>% suppressMessages() %>% suppressWarnings()
+    if (is(obj, "try-error")) return(1) else return(obj$p.value)
+}
 
 d3Dtest <- function(x,y,method = "t"){
     # wrapper for test on single loci
@@ -88,6 +92,8 @@ d3Dtest <- function(x,y,method = "t"){
     if(method == "t"){
         p <- ttest(x,y)
     }
+    if(method == "wilcox")
+        p <- wilcoxtest(x,y)
     else{
         dfy <- as.data.frame(table(y))
         names(dfy) <- c("type","Freq")
@@ -138,7 +144,7 @@ d3D <- function(mat1,mat2,binnames = rownames(mat1),threads = 50,p.adj.method = 
     return(sig)
 }
    
-simpleDiff_wrapper <- function(cellnames_type1,cellnames_type2,rawmat,mat,bintable_temp){
+simpleDiff_wrapper <- function(cellnames_type1,cellnames_type2,rawmat,mat,bintable_temp,test.method = "wilcox"){
     mat1_mean_all <- rawmat[cellnames_type1,] %>% colMeans(na.rm = TRUE)
     mat2_mean_all <- rawmat[cellnames_type2,] %>% colMeans(na.rm = TRUE)
 
@@ -148,55 +154,131 @@ simpleDiff_wrapper <- function(cellnames_type1,cellnames_type2,rawmat,mat,bintab
 
     sig <- d3D( mat[cellnames_type1,pull(mean_distance_all,pos)],
                 mat[cellnames_type2,pull(mean_distance_all,pos)],
-       pull(mean_distance_all,pos),threads = 20,filter_type="pv",filter_thres =2,test.method = "t")
+       pull(mean_distance_all,pos),threads = 20,filter_type="pv",filter_thres =2,test.method = test.method)
 
     sig <- cbind(sig,mean_distance_all)
     return(sig)
 }
 
 #main function                           
-simpleDiff <- function(rawpath_prefix,bintable,cellnames_type1,cellnames_type2=NULL,testname="simplediff",type="celltype"){
+# simpleDiff <- function(rawpath_prefix,bintable,cellnames_type1,cellnames_type2=NULL,testname="simplediff",type="celltype",write_mat=FALSE){
+#     options(scipen = 999)
+#     allcells = sort(c(cellnames_type1,cellnames_type2))
+#     starttime = Sys.time()
+#     for (chrom_now in paste0("chr",rev(seq(1,19)))){
+#         print(paste0("loading data for ",chrom_now,"!"))
+#         flush.console()
+#         bintable_temp <- bintable %>% filter(chrom %in% paste0(chrom_now,c("(mat)","(pat)")))
+#         filepaths <- paste0(rawpath_prefix,allcells ,".",chrom_now,".tsv.gz")
+#         binnames_temp <- bintable_temp %>% head(dim(bintable_temp)[1] / 2) %>% 
+#                 mutate(chrom = str_extract(chrom,pattern = "chr[0-9]+"),pos = paste0(chrom,"_",pos1,"_",pos2)) %>% pull(pos)
+
+#         mat <- load_mat(filepaths,bintable_temp,type="all",threads = 80) %>% t() %>% as.data.frame() %>% suppressMessages()
+#         rawmat <- mat[c(TRUE,FALSE),]
+#         mat <- mat[c(FALSE,TRUE),]
+
+#         rownames(mat) <-  paste0(sort(rep(allcells,2)),c("mat","pat"))
+#         names(mat) <- binnames_temp
+#         rownames(rawmat) <-  paste0(sort(rep(allcells,2)),c("mat","pat"))
+#         names(rawmat) <- binnames_temp
+
+#         if(type == "celltype"){
+#             sig <- simpleDiff_wrapper(paste0(rep(cellnames_type1,2),c("mat","pat")),paste0(rep(cellnames_type2,2),c("mat","pat")),rawmat,mat)
+#         }
+#         else if(type == "allele"){
+#             sig <- simpleDiff_wrapper(paste0(allcells,"mat"),paste0(allcells,"pat"),rawmat,mat)
+#         }
+
+
+#         dir.create("di_all") %>% suppressMessages()%>% suppressWarnings()
+#         dir.create("mat_all") %>% suppressMessages()%>% suppressWarnings()
+#         sig %>% write_tsv(paste0("di_all/",testname,".",chrom_now,".tsv"))
+#         sig <- sig%>% filter(pv < 0.05)
+#         if(write_mat == TRUE){
+#             sig <- sig%>% filter(pv < 0.05)
+#             mat[,sig%>% pull(pos) %>% unique()] %>% saveRDS(paste0("di_mat/",testname,".",chrom_now,".mat.rds.gz"))
+#         }
+#         print(paste0("Done for ",chrom_now,"!"))
+
+#         rm(mat)
+#         rm(rawmat)
+#         gc()
+#     }
+#     endtime = Sys.time()
+
+#     print(paste0("Duration = ", endtime - starttime))
+# }
+simpleDiff <- function (rawpath_prefix, bintable, cellnames_type1, cellnames_type2 = NULL, 
+    testname = "simplediff", type = "celltype", write_mat = FALSE,testtimes = 30,test.method = "wilcox") 
+{
     options(scipen = 999)
-    allcells = c(cellnames_type1,cellnames_type2)
+    allcells = sort(c(cellnames_type1, cellnames_type2))
     starttime = Sys.time()
-    for (chrom_now in paste0("chr",rev(seq(1,19)))){
-        print(paste0("loading data for ",chrom_now,"!"))
+    for (chrom_now in paste0("chr", rev(seq(1, 19)))) {
+        print(paste0("loading data for ", chrom_now, "!"))
         flush.console()
-        bintable_temp <- bintable %>% filter(chrom %in% paste0(chrom_now,c("(mat)","(pat)")))
-        filepaths <- paste0(rawpath_prefix,allcells ,".",chrom_now,".tsv.gz")
-        binnames_temp <- bintable_temp %>% head(dim(bintable_temp)[1] / 2) %>% 
-                mutate(chrom = str_extract(chrom,pattern = "chr[0-9]+"),pos = paste0(chrom,"_",pos1,"_",pos2)) %>% pull(pos)
-
-        mat <- load_mat(filepaths,bintable_temp,type="all",threads = 80) %>% t() %>% as.data.frame() %>% suppressMessages()
-        rawmat <- mat[c(TRUE,FALSE),]
-        mat <- mat[c(FALSE,TRUE),]
-
-        rownames(mat) <-  paste0(sort(rep(allcells,2)),c("mat","pat"))
+        bintable_temp <- bintable %>% filter(chrom %in% paste0(chrom_now, 
+            c("(mat)", "(pat)")))
+        filepaths <- paste0(rawpath_prefix, allcells, ".", chrom_now, 
+            ".tsv.gz")
+        binnames_temp <- bintable_temp %>% head(dim(bintable_temp)[1]/2) %>% 
+            mutate(chrom = str_extract(chrom, pattern = "chr[0-9]+"), 
+                pos = paste0(chrom, "_", pos1, "_", pos2)) %>% 
+            pull(pos)
+        mat <- load_mat(filepaths, bintable_temp, type = "all", 
+            threads = 80) %>% t() %>% as.data.frame() %>% suppressMessages()
+        rawmat <- mat[c(TRUE, FALSE), ]
+        mat <- mat[c(FALSE, TRUE), ]
+        rownames(mat) <- paste0(sort(rep(allcells, 2)), c("mat", 
+            "pat"))
         names(mat) <- binnames_temp
-        rownames(rawmat) <-  paste0(sort(rep(allcells,2)),c("mat","pat"))
+        rownames(rawmat) <- paste0(sort(rep(allcells, 2)), c("mat", 
+            "pat"))
         names(rawmat) <- binnames_temp
-
-        if(type == "celltype"){
-            sig <- simpleDiff_wrapper(paste0(rep(cellnames_type1,2),c("mat","pat")),paste0(rep(cellnames_type2,2),c("mat","pat")),rawmat,mat)
+        dir.create("di_all") %>% suppressMessages() %>% suppressWarnings()
+        dir.create("mat_all") %>% suppressMessages() %>% suppressWarnings()
+        
+        if (type == "celltype") {
+            sig <- simpleDiff_wrapper(paste0(rep(cellnames_type1, 
+                2), c("mat", "pat")), paste0(rep(cellnames_type2, 
+                2), c("mat", "pat")), rawmat, mat,test.method = test.method)
+            sig %>% write_tsv(paste0("di_all/", testname, ".", chrom_now, 
+            ".tsv"))
         }
-        else if(type == "allele"){
-            sig <- simpleDiff_wrapper(paste0(allcells,"mat"),paste0(allcells,"pat"),rawmat,mat)
+        else if (type == "allele") {
+            sig <- simpleDiff_wrapper(paste0(allcells, "mat"), 
+                paste0(allcells, "pat"), rawmat, mat,test.method = test.method)
+            sig %>% write_tsv(paste0("di_all/", testname, ".", chrom_now, 
+            ".tsv"))
         }
-
-
-        dir.create("di_all") %>% suppressMessages()%>% suppressWarnings()
-        dir.create("mat_all") %>% suppressMessages()%>% suppressWarnings()
-        sig %>% write_tsv(paste0("di_all/",testname,".",chrom_now,".tsv"))
-        sig <- sig%>% filter(pv < 0.05)
-        mat[,sig%>% pull(pos) %>% unique()] %>% saveRDS(paste0("di_mat/",testname,".",chrom_now,".mat.rds.gz"))
-        print(paste0("Done for ",chrom_now,"!"))
-
+        else if (type == "random") {
+            for (seed in (seq(testtimes)+30)){
+                set.seed(seed)
+                chunk2 <- function(x,n) split(x, cut(seq_along(x), n, labels = FALSE)) 
+                cellnamesnow <- chunk2(allcells %>% sample(),2)
+                sig <- simpleDiff_wrapper(paste0(rep(cellnamesnow[[1]],2), c("mat", "pat")), paste0(rep(cellnamesnow[[2]],2), c("mat", "pat")), rawmat, mat,test.method = test.method)
+                sig %>% write_tsv(paste0("di_all/", testname, ".seed",seed,".",chrom_now,".tsv"))
+            }
+        }
+        else if (type == "sample") {
+            set.seed(42)
+            for (cellnumber in c(20,40,60,80,100,120,140,160,180)){
+                sig <- simpleDiff_wrapper(paste0(rep(sample(cellnames_type1)[1:cellnumber],2), c("mat", "pat")), paste0(rep(cellnames_type2,2), c("mat", "pat")), rawmat, mat,test.method = test.method)
+                sig %>% write_tsv(paste0("di_all/", testname, ".cellnumber",cellnumber,".",chrom_now,".tsv"))
+            }
+        }
+        sig <- sig %>% filter(pv < 0.05)
+        if (write_mat == TRUE) {
+            sig <- sig %>% filter(pv < 0.05)
+            mat[, sig %>% pull(pos) %>% unique()] %>% saveRDS(paste0("di_mat/", 
+                testname, ".", chrom_now, ".mat.rds.gz"))
+        }
+        print(paste0("Done for ", chrom_now, "!"))
         rm(mat)
         rm(rawmat)
         gc()
     }
     endtime = Sys.time()
-
     print(paste0("Duration = ", endtime - starttime))
 }
                            

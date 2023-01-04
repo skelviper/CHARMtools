@@ -106,7 +106,7 @@ align_cellcycle <- function(obj,celltype1,celltype2,numPts = 50,sample_number = 
     #print(mean_num)
     p_return <- (alignment_plot | histogram_plot) + plot_layout(widths = c(2, 1))
 
-    return(c(list(p_return),mean_num,list(metaNodePt),list(alignment),list(mapping)))
+    return(c(list(p_return),mean_num,list(temp),list(alignment),list(mapping)))
 }
 
 # plot cdps heatmap
