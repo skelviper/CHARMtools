@@ -3,6 +3,11 @@ import numpy as np
 import pandas as pd
 import gzip
 import os
+from pkgutil import get_data
+from io import StringIO
+from . import ref
+#import ref
+from functools import partial
 
 #upsteram hic
 def divide_name(filename):
@@ -154,13 +159,28 @@ def parse_gtf(filename:str) -> pd.DataFrame:
     gencode.columns="seqname source feature start end score strand frame group".split()
     return gencode
 
+## norm name
+def converter_template(c_in:str,ref_dict:pd.DataFrame):
+    # a reat_table converter function
+    #print(ref_dict)
+    return ref_dict[c_in]
+def fill_func_ref(template_func:callable, ref_file:str, index_col:str)->callable:
+    # read in ref_file for template_fucn, generate new func
+    # hope will boost new func's speed
+    
+    ## read in ref_file, get ref_dict in memory
+    ref_df = pd.read_csv(ref_file, index_col=index_col)
+    ref_dict = ref_df.iloc[:,0].to_dict()
+    working_func = partial(template_func, ref_dict=ref_dict)
+    return working_func
+
 def parse_3dg(filename:str)->pd.DataFrame:
     # read in hickit 3dg file(or the .xyz file)
     # norm chr name alias
 
     ## get alias file in package
     ## reference is a "data module" with its own __init__.py
-    dat = get_data(reference.__name__, "chrom_alias.csv")
+    dat = get_data(ref.__name__, "chrom_alias.csv")
     dat_f = StringIO(dat.decode())
     norm_chr = fill_func_ref(
                     converter_template,

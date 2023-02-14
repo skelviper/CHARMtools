@@ -195,3 +195,40 @@ def cooltoolsGetPsData(clr:cooler.Cooler,nthreads:int,refgenome:str)->pd.DataFra
 	lb_cvd_agg['s_bp'] = lb_cvd_agg['dist.avg'] * clr.binsize
 	lb_slopes_agg['s_bp'] = lb_slopes_agg['dist.avg'] * clr.binsize
 	return aggExpected,lb_slopes_agg
+
+
+# call A/B compartmnet 
+def _ABcompartment_from_mat(mat,chrom,cgpath,n_components=3,resolution = 100000):
+    from sklearn.decomposition import PCA
+    
+    cor_mat = compartment.getPearsonCorrMatrix(mat)
+    cor_mat[np.isnan(cor_mat)] = 0
+    pca = PCA(n_components=n_components)
+    pca.fit(cor_mat)
+    pca_df = pd.DataFrame(pca.components_.T)
+    pca_df.columns = ["PC{}".format(i) for i in range(1, n_components+1)]
+    pca_df["chrom"] = chrom
+    pca_df["start"] = np.arange(0, len(pca_df)*resolution, resolution)
+    pca_df["end"] = pca_df["start"] + resolution
+    pca_df = pca_df[["chrom", "start", "end"] + ["PC{}".format(i) for i in range(1, n_components+1)]]
+    # correct the sign of PC1
+    CG = pd.read_csv(cgpath,sep="\t",header = None)
+    CG.columns = ["chrom","start","end","GC"]
+    CG = pca_df[['chrom','start','end']].merge(CG,how='left',on=['chrom','start','end'])
+    CG = CG.fillna(0)
+    if np.corrcoef(CG.query('chrom == @chrom')["GC"].values, pca_df["PC1"].values)[1][0] < 0:
+        pca_df["PC1"] = -pca_df["PC1"]
+    return pca_df
+
+def _ABcompartment_from_cooler(clr,cgpath,chrom,n_components=3,resolution = 100000):
+    mat = clr.matrix(balance=False).fetch(chrom)
+    return _ABcompartment_from_mat(mat,chrom,cgpath,n_components,resolution)
+
+def call_compartment(clr,cgpath,n_components=3,resolution = 100000):
+    chroms = clr.chroms()[:].name.values
+    return pd.concat([_ABcompartment_from_cooler(clr,cgpath,chrom,n_components,resolution) for chrom in chroms])
+
+# example 
+# cgpath = "/share/home/zliu/share/Data/public/ref_genome/mouse_ref/M23/CpG/mm10.GC.100k.txt"
+# es_clr = cooler.Cooler("/share/home/zliu/research/publicData/Bonev2017/processedData/processed/mcools/ES.balanced.mcool::resolutions/100000")
+# es_comp = call_compartment(es_clr,cgpath)

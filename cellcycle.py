@@ -19,7 +19,7 @@ from python_tsp.distances import euclidean_distance_matrix
 from bisect import bisect_left, bisect_right
 from itertools import dropwhile
 from functools import partial
-
+from . import ref
 from .CHARMio import parse_pairs
 
 def window_count(distances:pd.DataFrame, win_num:int,type="Nagano",resolution=100000)->pd.Series:
