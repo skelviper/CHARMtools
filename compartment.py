@@ -93,6 +93,7 @@ def getPearsonCorrMatrix(matrix:np.ndarray)->np.ndarray:
     get decay profile normalized pearson correlation matrix
     """
     matrix = getOEMatrix(matrix)
+    matrix[np.isnan(matrix)] = 0
     matrix = np.corrcoef(matrix)
     
     return matrix
@@ -201,7 +202,7 @@ def cooltoolsGetPsData(clr:cooler.Cooler,nthreads:int,refgenome:str)->pd.DataFra
 def _ABcompartment_from_mat(mat,chrom,cgpath,n_components=3,resolution = 100000):
     from sklearn.decomposition import PCA
     
-    cor_mat = compartment.getPearsonCorrMatrix(mat)
+    cor_mat = getPearsonCorrMatrix(mat)
     cor_mat[np.isnan(cor_mat)] = 0
     pca = PCA(n_components=n_components)
     pca.fit(cor_mat)
