@@ -7,9 +7,61 @@ from joblib import Parallel, delayed
 import multiprocessing
 import numpy as np
 import matplotlib.pyplot as plt
+import tqdm
 import cooltools.lib.plotting
+import gzip
 
-# IO
+def _bedgraph_to_dense(bedgraph,chrom_sizes:str,resolution = 500):
+    genome_intervals = _generate_genomic_intervals(chrom_sizes,resolution)
+    dense = pd.merge(genome_intervals,bedgraph,how="left",on=["chr","start","end"])
+    dense = dense.fillna(0)
+    dense = dense[["chr","start","end","count"]]
+    return dense
+    
+def pairs_to_bedgraph(pairspath,chrom_sizes,binsize=500, num_cores=1,chunksize = None,normalize_method = "cpm"):
+    combined_bedgraph = pd.DataFrame()
+    if chunksize is None:
+        with gzip.open(pairspath, 'rt') as f:
+            #print("here"
+            results = _process_chunk(pd.read_csv(f, sep='\t',comment="#",header=None),binsize,chrom_sizes)
+            #print(results)
+            combined_bedgraph = results
+    else:
+        with gzip.open(pairspath, 'rt') as f:
+            results = Parallel(n_jobs=num_cores)(delayed(_process_chunk)(chunk,binsize,chrom_sizes) for chunk in tqdm.tqdm(pd.read_csv(f, sep='\t', chunksize=chunksize)))
+            combined_bedgraph = pd.concat(results).groupby(["chr","start","end"]).agg({"count":"sum"}).reset_index()
+
+    if(normalize_method == "cpm"):
+        combined_bedgraph["count"] = combined_bedgraph["count"] / (combined_bedgraph["count"].sum() / 1e6)
+    return combined_bedgraph
+
+def multiple_pairs_to_bedgraph(pairs_paths,chrom_sizes,binsize=500, num_cores=10,normalize_method = "cpm"):
+    combined_bedgraph = pd.DataFrame()
+    pairs_paths = glob.glob(pairs_paths)
+    results = Parallel(n_jobs=num_cores)(delayed(pairs_to_bedgraph)(i,chrom_sizes,binsize=binsize,chunksize = None,num_cores=1,normalize_method=None) for i in pairs_paths)
+    #combined_bedgraph = pd.concat(results).groupby(["chr","start","end"]).agg({"count":"sum"}).reset_index()
+    summed_count = np.sum([table["count"].values for table in results],axis=0)
+    combined_bedgraph = results[0][["chr","start","end"]]
+    combined_bedgraph = combined_bedgraph.assign(count = summed_count)
+    if(normalize_method == "cpm"):
+        combined_bedgraph["count"] = combined_bedgraph["count"] / (combined_bedgraph["count"].sum() / 1e6)
+    return combined_bedgraph
+
+def _process_chunk(chunk,binsize,chrom_sizes):
+    chunk = chunk.iloc[:,0:5]
+    chunk.columns = ["readid","chr1","pos1","chr2","pos2"]
+    left = chunk[["chr1","pos1"]]
+    left.columns = ["chr","pos"]
+    right = chunk[["chr2","pos2"]]
+    right.columns = ["chr","pos"]
+    pairs = pd.concat([left,right])
+    bined_pairs = pairs.assign(bin = pairs.pos // binsize * binsize).groupby(["chr","bin"]).aggregate("count").reset_index()
+    bined_pairs.columns = ["chr","start","count"]
+    bined_pairs = bined_pairs.assign(end = bined_pairs.start + binsize)
+    bined_pairs = bined_pairs[["chr","start","end","count"]]
+    dense = _bedgraph_to_dense(bined_pairs,chrom_sizes=chrom_sizes,resolution=binsize)
+    return dense
+    
 # CHARMio.parse_pairs
 # CHARMio.write_pairs
 
@@ -38,19 +90,19 @@ def parse_and_combine_pairs(file_paths, num_cores = None) -> pd.DataFrame:
     combined_pairs.reset_index(drop=True,inplace=True)
     return combined_pairs
 
-def pairs_to_bedgraph(pairs, binsize=500, num_cores=None,normalize_method = "cpm"):
-    left = pairs[["chr1","pos1"]]
-    left.columns = ["chr","pos"]
-    right = pairs[["chr2","pos2"]]
-    right.columns = ["chr","pos"]
-    pairs = pd.concat([left,right])
-    bined_pairs = pairs.assign(bin = pairs.pos // binsize * binsize).groupby(["chr","bin"]).aggregate("count").reset_index()
-    bined_pairs.columns = ["chr","start","count"]
-    bined_pairs = bined_pairs.assign(end = bined_pairs.start + binsize)
-    bined_pairs = bined_pairs[["chr","start","end","count"]]
-    if(normalize_method == "cpm"):
-        bined_pairs["count"] = bined_pairs["count"] / (bined_pairs["count"].sum() / 1e6)
-    return bined_pairs
+# def pairs_to_bedgraph(pairs, binsize=500, num_cores=None,normalize_method = "cpm"):
+#     left = pairs[["chr1","pos1"]]
+#     left.columns = ["chr","pos"]
+#     right = pairs[["chr2","pos2"]]
+#     right.columns = ["chr","pos"]
+#     pairs = pd.concat([left,right])
+#     bined_pairs = pairs.assign(bin = pairs.pos // binsize * binsize).groupby(["chr","bin"]).aggregate("count").reset_index()
+#     bined_pairs.columns = ["chr","start","count"]
+#     bined_pairs = bined_pairs.assign(end = bined_pairs.start + binsize)
+#     bined_pairs = bined_pairs[["chr","start","end","count"]]
+#     if(normalize_method == "cpm"):
+#         bined_pairs["count"] = bined_pairs["count"] / (bined_pairs["count"].sum() / 1e6)
+#     return bined_pairs
 
 def _generate_genomic_intervals(chrom_sizes:str,resolutions=500): 
     #return a bed-like dataframe
@@ -65,52 +117,6 @@ def _generate_genomic_intervals(chrom_sizes:str,resolutions=500):
             intervals.append([chr_name,i,i+resolutions])
     intervals_df = pd.DataFrame(intervals,columns=["chr","start","end"])
     return intervals_df
-
-def _bedgraph_to_dense(bedgraph,chrom_sizes:str,resolution = 500):
-    genome_intervals = _generate_genomic_intervals(chrom_sizes,resolution)
-    dense = pd.merge(genome_intervals,bedgraph,how="left",on=["chr","start","end"])
-    dense = dense.fillna(0)
-    dense = dense[["chr","start","end","count"]]
-    return dense
-
-# def _pileup_partition(bed,bedgraph,flank,resolution):
-#     bed.columns = ["chr","start","end"]
-#     bed = bed.assign(midpoint = (bed["start"] + bed["end"]) // 2 // resolution * resolution)
-#     bed = bed.assign(start = bed["midpoint"] - flank)
-#     bed = bed.assign(end = bed["midpoint"] + flank + resolution)
-#     bed = bed[["chr","start","end"]]
-
-#     bedgraph_dict = bedgraph.groupby("chr")
-#     result = []
-#     for index, row in bed.iterrows():
-#         chr_name = row["chr"]
-#         start = row["start"]
-#         end = row["end"]
-#         if chr_name in bedgraph_dict.groups:
-#             chr_group = bedgraph_dict.get_group(chr_name)
-#             chr_group = chr_group[(chr_group["start"] >= start) & (chr_group["end"] <= end)]
-#             #print(chr_group["count"].values)
-#             result.append(chr_group["count"].values)
-#         else:
-#             result.append(np.zeros((int((end-start)/resolution),)))
-#     return np.array(result)
-        
-# def pileup_bedgraph_on_bed(bed, bedgraph, flank=20000, resolution = 500,num_cores = None):
-#     bed = bed.iloc[:,0:3]
-#     bed.columns = ["chr","start","end"]
-#     bed = bed.assign(midpoint = (bed["start"] + bed["end"]) // 2 // resolution * resolution)
-#     bed = bed.assign(start = bed["midpoint"] - flank)
-#     bed = bed.assign(end = bed["midpoint"] + flank + resolution)
-#     bed = bed[["chr","start","end"]]
-
-#     if(num_cores is None):
-#         num_cores = multiprocessing.cpu_count() - 5
-#     num_partitions = num_cores * 2
-#     partitions = np.array_split(bed, num_partitions)
-#     results = Parallel(n_jobs=num_cores)(delayed(_pileup_partition)(partition,bedgraph,flank,resolution) for partition in partitions)
-#     results = np.array(results)
-#     results = results.reshape(-1,results.shape[2])
-#     return results
 
 def pileup_bedgraph_on_bed(bed, bedgraph, flank=20000, resolution = 500):
     bed = bed.iloc[:,0:3]
@@ -130,32 +136,62 @@ def pileup_bedgraph_on_bed(bed, bedgraph, flank=20000, resolution = 500):
             chr_group = bedgraph_dict.get_group(chr_name)
             chr_group = chr_group[(chr_group["start"] >= start) & (chr_group["end"] <= end)]
             #print(chr_group["count"].values)
+            if len(chr_group["count"].values) != 2 * flank // resolution + 1:
+                continue
             result.append(chr_group["count"].values)
         else:
             result.append(np.zeros((int((end-start)/resolution),)))
     return np.array(result)
 
 
-def plot_enrichment(matrix):
+def plot_enrichment(matrix,flank):
     fig, axs = plt.subplots(2, 1, figsize=(4, 4), dpi=150, gridspec_kw={'height_ratios': [1, 2]},sharex=True,constrained_layout=True)
     plt.sca(axs[0])
     axs[0]= plt.plot(np.mean(matrix,axis=0))
     plt.sca(axs[1])
     matrix = matrix[np.argsort(np.sum(matrix,axis=1))[::-1],:]
-    ax = axs[1].imshow(matrix, cmap="fall", aspect="auto",vmin = 0,vmax= 0.5)
+    #ax = axs[1].imshow(matrix, cmap="fall", aspect="auto",vmin = 0,vmax= 0.5)
+    # 95% data as vmax and vmin
+    vmax = np.percentile(matrix, 95)
+    vmin = np.percentile(matrix, 5)
+    ax = axs[1].imshow(matrix, cmap="fall", aspect="auto",vmin = vmin,vmax= vmax)
 
     plt.colorbar(ax)
     plt.yticks([])
-    plt.xticks([0,40,80],["-20kb","center","+20kb"])
+    plt.xticks([0,(matrix.shape[1]-1)/2,matrix.shape[1]-1],["-"+str(flank/1000)+"k","center","+"+str(flank/1000)+"k"])
 
     plt.show()
     return(fig)
 
 def pairs_enrichment_pipeline(pairspath:str,regions:str,flank:int,resolution:int,num_cores:int,chrom_sizes:str):
-    pairs = parse_and_combine_pairs(pairspath,num_cores=num_cores)
-    bed = pd.read_csv(regions,sep="\t",header=None).sample(10000)
-    bedgraph = pairs_to_bedgraph(pairs,binsize=resolution,num_cores=num_cores,normalize_method="cpm")
-    bedgraph = _bedgraph_to_dense(bedgraph,chrom_sizes=chrom_sizes,resolution=resolution)
+    import time 
+    start = time.time()
+    bed = pd.read_csv(regions,sep="\t",header=None)
+    bedgraph = multiple_pairs_to_bedgraph(pairspath,chrom_sizes = chrom_sizes,binsize=resolution,num_cores=num_cores,normalize_method="cpm")
+    #print("bedgraph generated at {} seconds".format(time.time() - start))
     pileup = pileup_bedgraph_on_bed(bed,bedgraph,flank=flank,resolution=resolution)#num_cores=num_cores)
-    fig = plot_enrichment(pileup)
-    return fig
+    #return(pileup)
+    # print(pileup)
+    #print("pileup generated at {} seconds".format(time.time() - start))
+    fig = plot_enrichment(pileup,flank=flank)
+    #print("plot generated at {} seconds".format(time.time() - start))
+    print("Enrichment at peak: " + str(np.mean(pileup[:,flank//resolution]) * 2 / np.mean((pileup[:,0] + pileup[:,-1]))))
+    return bedgraph,fig
+
+def remove_regions_from_pairs(pairs_path_in,pairs_path_out,regions):
+    pairs = CHARMio.parse_pairs(pairs_path_in)
+    pairs["readID"] = "read" + pairs.index.astype(str)
+    bedpe = pairs[["readID","chr1","pos1","chr2","pos2"]]
+    bedpe = bedpe.assign(start1=bedpe.pos1, end1=bedpe.pos1+1, start2=bedpe.pos2, end2=bedpe.pos2+1)[["chr1","start1","end1","chr2","start2","end2","readID"]]
+    bedpe.columns = ["chrom1","start1","end1","chrom2","start2","end2","readID"]
+
+    bedpe_bedtool = BedTool.from_dataframe(bedpe)
+    bed_bedtool = BedTool.from_dataframe(regions)
+
+    bedpe_keep = BedTool.pair_to_bed(bedpe_bedtool, bed_bedtool, type = "neither").to_dataframe()[["thickStart"]]
+    bedpe_keep.columns = ["readID"]
+
+    pairs_write = pd.merge(pairs,bedpe_keep,how="inner",on="readID")
+    pairs_write.attrs["comments"] = pairs.attrs["comments"]
+    print("Percent of pairs removed: %.4f" % (1-len(pairs_write)/len(pairs)))
+    CHARMio.write_pairs(pairs_write,pairs_path_out)
