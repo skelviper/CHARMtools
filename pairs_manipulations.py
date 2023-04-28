@@ -17,6 +17,17 @@ def _bedgraph_to_dense(bedgraph,chrom_sizes:str,resolution = 500):
     dense = dense.fillna(0)
     dense = dense[["chr","start","end","count"]]
     return dense
+
+def bed_to_bedgraph(bed,chrom_sizes,binsize = 100):
+    bed.columns = ["chr","start","end"]
+    bed=bed.assign(pos = lambda x: (x["start"] + x["end"]) // 2)
+    bed = bed[["chr","pos"]]
+    bined_bed = bed.assign(bin = bed.pos // binsize * binsize).groupby(["chr","bin"]).aggregate("count").reset_index()
+    bined_bed.columns = ["chr","start","count"]
+    bined_bed = bined_bed.assign(end = bined_bed.start + binsize)
+    bined_bed = bined_bed[["chr","start","end","count"]]
+    dense = _bedgraph_to_dense(bined_bed,chrom_sizes=chrom_sizes,resolution=binsize)
+    return dense
     
 def pairs_to_bedgraph(pairspath,chrom_sizes,binsize=500, num_cores=1,chunksize = None,normalize_method = "cpm"):
     combined_bedgraph = pd.DataFrame()
@@ -195,3 +206,54 @@ def remove_regions_from_pairs(pairs_path_in,pairs_path_out,regions):
     pairs_write.attrs["comments"] = pairs.attrs["comments"]
     print("Percent of pairs removed: %.4f" % (1-len(pairs_write)/len(pairs)))
     CHARMio.write_pairs(pairs_write,pairs_path_out)
+
+
+import multiprocessing
+from tqdm import tqdm
+
+def process_bed_chunk(bed_chunk, bedgraph, flank, resolution):
+    bedgraph_dict = bedgraph.groupby("chr")
+    result = []
+
+    for index, row in bed_chunk.iterrows():
+        chr_name = row["chr"]
+        start = row["start"]
+        end = row["end"]
+
+        if chr_name in bedgraph_dict.groups:
+            chr_group = bedgraph_dict.get_group(chr_name)
+            chr_group = chr_group[(chr_group["start"] >= start) & (chr_group["end"] <= end)]
+            if len(chr_group["count"].values) != 2 * flank // resolution + 1:
+                result.append(None)
+            else:
+                result.append(chr_group["count"].values)
+        else:
+            result.append(np.zeros((int((end-start)/resolution),)))
+
+    return result
+
+def pileup_bedgraph_on_bed_parallel(bed, bedgraph, flank=20000, resolution=500, chunk_size=1000):
+    bed = bed.iloc[:, 0:3]
+    bed.columns = ["chr", "start", "end"]
+    bed = bed.assign(midpoint=(bed["start"] + bed["end"]) // 2 // resolution * resolution)
+    bed = bed.assign(start=bed["midpoint"] - flank)
+    bed = bed.assign(end=bed["midpoint"] + flank + resolution)
+    bed = bed[["chr", "start", "end"]]
+
+    result = []
+    chunks = [bed_chunk for _, bed_chunk in bed.groupby(np.arange(len(bed)) // chunk_size)]
+
+    with multiprocessing.Pool(15) as pool, tqdm(total=len(chunks)) as pbar:
+        results = []
+
+        def update(*a):
+            pbar.update()
+
+        for chunk in chunks:
+            results.append(pool.apply_async(process_bed_chunk, (chunk, bedgraph, flank, resolution), callback=update))
+
+        for res in results:
+            result.extend(res.get())
+
+    return np.array(result)
+
