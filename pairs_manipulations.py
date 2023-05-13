@@ -243,7 +243,7 @@ def pileup_bedgraph_on_bed_parallel(bed, bedgraph, flank=20000, resolution=500, 
     result = []
     chunks = [bed_chunk for _, bed_chunk in bed.groupby(np.arange(len(bed)) // chunk_size)]
 
-    with multiprocessing.Pool(15) as pool, tqdm(total=len(chunks)) as pbar:
+    with multiprocessing.Pool(20) as pool, tqdm(total=len(chunks)) as pbar:
         results = []
 
         def update(*a):
