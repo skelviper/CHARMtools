@@ -64,7 +64,7 @@ def plot_enrichment(enrichment_vector, enrichment_score):
 
     vec_len = len(enrichment_vector.sum(axis=0))
     plt.xticks([0, vec_len/4, vec_len / 2, vec_len / 4 * 3, vec_len],
-                ["-20k", "-10k", "0", "+10k", "+20k"])
+                ["-2k", "-1k", "0", "+1k", "+2k"])
 
     # Show the plot
     plt.show()
