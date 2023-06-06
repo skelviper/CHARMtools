@@ -233,3 +233,30 @@ def call_compartment(clr,cgpath,n_components=3,resolution = 100000):
 # cgpath = "/share/home/zliu/share/Data/public/ref_genome/mouse_ref/M23/CpG/mm10.GC.100k.txt"
 # es_clr = cooler.Cooler("/share/home/zliu/research/publicData/Bonev2017/processedData/processed/mcools/ES.balanced.mcool::resolutions/100000")
 # es_comp = call_compartment(es_clr,cgpath)
+
+# single cell compartment analysis related
+# adapt from generate color2 ,take a pairs
+# Usage: generateColor2.py coolerPath cpg.bed output.tsv
+# ls clean3_pairs | sed -e "s/.pairs.gz//g" | parallel -j 30 --progress "cooler cload pairs -c1 2 -c2 4 -p1 3 -p2 5 /share/Data/public/ref_genome/mouse_ref/M23/raw_data/chr.len:1000000 clean3_pairs/{}.pairs.gz cools/{}.1m.cool"
+
+# import cooler
+# import numpy as np
+# import pandas as pd
+# import sys
+
+# clr = cooler.Cooler(sys.argv[1])
+# linearCpGData = pd.read_csv(sys.argv[2],sep="\t",names=["chrom","start","end","cpg"],header=None)
+# chromlist = clr.chroms()[:][["name"]].values.T.tolist()[0][:19]
+
+# res = []
+# for chrom in chromlist:
+#     matrix = clr.matrix(balance=False).fetch(chrom).astype("int")
+#     matrix = np.diag(np.ones(matrix.shape[0])) + matrix
+#     matrix[matrix>0] = 1
+#     linearCpGData_bychrom = linearCpGData.query("chrom == @chrom")
+#     linear_cpg_vector = linearCpGData_bychrom["cpg"].to_numpy()
+#     location = linearCpGData_bychrom[["chrom","start","end"]]
+#     location["scAB"] = np.dot(matrix,linearCpGData.query('chrom == @chrom')["cpg"].values) / (np.sum(matrix,axis=0)+1)
+#     res.append(location)
+    
+# pd.concat(res).to_csv(sys.argv[3],sep="\t",header=None,index=None)%      

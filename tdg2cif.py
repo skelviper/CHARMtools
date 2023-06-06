@@ -5,9 +5,11 @@ import sys
 import pandas as pd
 
 def cli(args):
-    input_file, output_file, factorBpath, maxGap= \
-        args.input_file, args.output_file, args.factorBpath, args.maxGap
-    threedg_to_cif(input_file, output_file, factorBpath, maxGap)
+    input_file, output_file, factorBpath, maxGap, expansion= \
+        args.input_file, args.output_file, args.factorBpath, args.maxGap, args.expansion
+    print("input_file: ", input_file)
+    print("output_file: ", output_file)
+    threedg_to_cif(input_file, output_file, factorBpath, maxGap, expansion)
 
 class Bin:
     def __init__(self,id:int,chromosome:str,position:int,x_coord:float,y_coord:float,z_coord:float,factorB:float=None):
@@ -37,12 +39,23 @@ class Bin:
                           "1",str(self.nextBin.position)])
         else: return None
         
-def threedg_to_cif(tdgPath:str,outputCifPath:str,factorBpath:str=None,maxGap:int=1000000):
+def threedg_to_cif(tdgPath:str,outputCifPath:str,factorBpath:str=None,maxGap:int=1000000,expansion=1):
     """
     funtion as its name
     """
-    positions = pd.read_table(tdgPath,header=None,names="chr pos x y z".split()).replace("[()]","",regex=True) # read in
-    if(factorBpath!=None):
+    positions = pd.read_table(tdgPath,header=None,names="chr pos x y z".split()).replace("[()]","",regex=True)
+    if (expansion != 1):
+        positions[['x', 'y', 'z']] = positions[['x', 'y', 'z']].apply(pd.to_numeric)
+        total_center = positions[['x', 'y', 'z']].mean().values
+        chromosomes = positions['chr'].unique()
+        hom_centers = {}
+        for chr in chromosomes:
+            chr_center = positions[positions['chr']==chr][['x', 'y', 'z']].mean().values
+            hom_centers[chr] = chr_center
+            translation_vector = (chr_center - total_center) * expansion
+            positions.loc[positions['chr']==chr, ['x', 'y', 'z']] += translation_vector
+
+    if (factorBpath!=None):
         factorB = pd.read_table(factorBpath,header=None,names="chrom pos factorB".split())
         positions = pd.merge(positions.assign(chrom=positions.chr.replace('.at','',regex=True)),factorB,how="left")
         print(positions)

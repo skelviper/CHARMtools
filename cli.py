@@ -5,6 +5,7 @@ import clean_splicing
 import clean_isolated
 import sep_clean
 import clean3
+import tdg2cif
 
 def cli():
     parser = argparse.ArgumentParser(prog="CHARMtools", description="Functions for data-analysis in HiRES etc. projects")
@@ -215,6 +216,54 @@ def cli():
                             help="check contacts in what L-0.5 range",
                             default=10000000
     ) 
+
+    # --------- 3dg2cif subcommand ---------
+    tdg2cif_arg = subcommands.add_parser(
+                            "tdg2cif",  
+                            help="convert 3dg file to cif file"
+    )
+    tdg2cif_arg.set_defaults(handle=tdg2cif.cli)
+    tdg2cif_arg.add_argument(
+                            "-i","--input",
+                            dest="input_file",
+                            metavar="INPUT_FILE",
+                            help="input filename",
+                            required=True,
+                            action="store"
+    )
+    tdg2cif_arg.add_argument(
+                            "-o", "--output",
+                            dest="output_file",
+                            metavar="OUTPUT_FILE",
+                            required=True,
+                            help="output file name",
+                            action="store"
+    )
+    tdg2cif_arg.add_argument(
+                            "-f", "--factorB",
+                            dest="factorBpath",
+                            metavar="FACTOR_B",
+                            help="factor B file path",
+                            action="store"
+    )
+    tdg2cif_arg.add_argument(
+                            "-g", "--maxGap",
+                            dest="maxGap",
+                            metavar="MAX_GAP",
+                            help="max gap between two bins to be connected",
+                            type=int,
+                            default=1000000
+    )
+    tdg2cif_arg.add_argument(
+                            "-e", "--expansion",
+                            dest="expansion",
+                            metavar="EXPANSION",
+                            help="expand the structure by this factor",
+                            type=float,
+                            default=1
+    )
+    
+        
 
     args = parser.parse_args()
     #print(args.replace_switch)
