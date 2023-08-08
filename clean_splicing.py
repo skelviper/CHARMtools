@@ -4,6 +4,7 @@ import gzip
 from concurrent import futures
 from functools import partial
 import pandas as pd
+import re
 
 
 from CHARMio import parse_pairs, parse_gtf, write_pairs
@@ -15,8 +16,15 @@ def cli(args)->int:
     pairs = parse_pairs(filename)
     # build in-mem exon index
     gtf = parse_gtf(gtf_file)
-    ref = build_in_memory_index(get_exon(gtf))
-    # do search
+    try:
+        typegenome = re.search(r'rabbit', gtf_file).group(0)
+    except:
+        typegenome = "else"
+    if typegenome == "rabbit":
+        ref = build_in_memory_index(get_exon_rab(gtf))
+    else:
+        ref = build_in_memory_index(get_exon(gtf))
+    #do search
     cleaned = clean_splicing(pairs, ref, thread)
     write_pairs(cleaned, out_name)
 def get_exon(gtf:pd.DataFrame) -> pd.DataFrame:
@@ -37,7 +45,7 @@ def build_in_memory_index(exons:pd.DataFrame) -> dict:
         bed_interval_index = pd.IntervalIndex.from_tuples(bed_tuple)
         by_chr_table.index = bed_interval_index
         ref_dict[chromosome] = by_chr_table.drop(["start","end","seqname"],axis=1)
-    sys.stderr.write("hires_utils::clean_splicing: index done.\n")
+    sys.stderr.write("CHARMtools::clean_splicing: index done.\n")
     return ref_dict
 def legs_co_gene(contact:pd.Series, chromosome:str, ref_dict:dict)->bool:
     # whether two legs of contacts are in same gene's exon
@@ -72,6 +80,14 @@ def clean_splicing(pairs:pd.DataFrame, ref:dict, thread:int)->pd.DataFrame:
     print("clean_splicing: %d contacts removed in %s\n" %(len(result), pairs.attrs["name"]) )
     return cleaned
 
+def get_exon_rab(gtf:pd.DataFrame) -> pd.DataFrame:
+    # extract exon-gene_name from gtf table
+    relevant = gtf.query('feature == "exon"') #using HAVANA only
+    gene_id = relevant["group"].str.extract('gene_id "([A-Za-z0-9_-]+)";') #extract gene name from group
+    gene_id.columns = ["gene_id"] # extract returns dataframe rather than series
+    # don't mind strand
+    return pd.concat([relevant.drop(["group","feature","source","score","strand","frame"],axis=1),gene_id],axis=1)
+
 if __name__ == "__main__":
     # infile = "/shareb/zliu/project/202212/hires_pipe/result/cleaned_pairs/c12/OrgfE951001.pairs.gz"
     # gtf_file = "/share/Data/public/ref_genome/mouse_ref/M23/raw_data/annotation.gtf"
@@ -79,12 +95,16 @@ if __name__ == "__main__":
     infile = sys.argv[1]
     gtf_file = sys.argv[2]
     outfile = sys.argv[3]
+    typegenome = sys.argv[4]
     thread = 6
 
     pairs = parse_pairs(infile)
     # build in-mem exon index
     gtf = parse_gtf(gtf_file)
-    ref = build_in_memory_index(get_exon(gtf))
+    if typegenome == "rab":
+        ref = build_in_memory_index(get_exon_rab(gtf))
+    else:
+        ref = build_in_memory_index(get_exon(gtf))
     # do search
     cleaned = clean_splicing(pairs, ref, thread)
     write_pairs(cleaned, outfile)

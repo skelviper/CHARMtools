@@ -174,7 +174,7 @@ if __name__ == "__main__":
     parser.add_argument('--ct_path', type=str, help='path to CT file',required=False)               
 
     args = parser.parse_args()
-    tdg = charm_get_3dplot_data(CpG_path = "/share/home/zliu/share/Data/public/ref_genome/mouse_ref/M23/CpG/dipc_cpg/mm10.CpG.200000.txt",
+    tdg = charm_get_3dplot_data(CpG_path = args.cpg_path,
                                 tdg_path= args.tdg_path,
                                 atac_path=args.atac_path,
                                 ct_path=args.ct_path,
