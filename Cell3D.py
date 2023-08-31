@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 import warnings
 from scipy.spatial import KDTree
+import rmsd
 
 
 class Cell3D:
@@ -130,6 +131,56 @@ class Cell3D:
                 tdg_temp = tdg_temp.query("x > -@slice_width & x < @slice_width")
 
         return tdg_temp
+    
+    # analysis
+    #calc_rmsd = lambda x,y: np.sqrt(np.mean((x-y)**2))
+    def calculate_RMSD(*dataframes):
+        """
+        Calculate RMSD for a list of dataframes.
+
+        Parameters:
+            *dataframes : variable length dataframe arguments
+                Each dataframe should have columns 'chrom', 'pos', 'x', 'y', 'z'
+
+        Returns:
+            float, float : RMS RMSD and median RMSD of all pair combinations
+        """
+        
+        num_structures = len(dataframes)
+        if num_structures < 2:
+            raise ValueError("At least 2 structures are required.")
+        
+        # Find common points across all structures
+        common_points = dataframes[0][['chrom', 'pos']]
+        for df in dataframes[1:]:
+            common_points = pd.merge(common_points, df[['chrom', 'pos']], on=['chrom', 'pos'],how='inner')
+        
+        all_rmsds = []
+
+        for i in range(num_structures):
+            for j in range(i + 1, num_structures):
+                coords_i = pd.merge(common_points, dataframes[i], on=['chrom', 'pos'])[['x', 'y', 'z']].values
+                coords_j = pd.merge(common_points, dataframes[j], on=['chrom', 'pos'])[['x', 'y', 'z']].values
+                
+                # Subtract centroid
+                centroid_i = rmsd.centroid(coords_i)
+                centroid_j = rmsd.centroid(coords_j)
+                coords_i -= centroid_i
+                coords_j -= centroid_j
+                
+                # Calculate pairwise RMSD
+                if rmsd.kabsch_rmsd(coords_i, coords_j) > rmsd.kabsch_rmsd(coords_i, -1.0 * coords_j):
+                    coords_j *= -1.0            
+                rmsd_value = rmsd.kabsch_rmsd(coords_i, coords_j)
+                all_rmsds.append(rmsd_value)
+
+        # Calculate RMS RMSD
+        rms_rmsd = np.sqrt(np.mean(np.array(all_rmsds)**2))
+        
+        # Calculate median RMSD
+        median_rmsd = np.median(all_rmsds)
+        
+        return rms_rmsd, median_rmsd
 
     # data visualize
     def fast_plot3D(ax,x,y,z,c,view=(0,0,0),**kwargs):
