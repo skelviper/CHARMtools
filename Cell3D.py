@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 import warnings
-from scipy.spatial import KDTree
+from scipy.spatial import cKDTree
 import rmsd
 
 
@@ -12,7 +12,7 @@ class Cell3D:
         self.tdg = self._load_tdg(tdg_path)
         self.resolution = resolution
         self.features = []
-        self.kdtree = KDTree(self.tdg[["x", "y", "z"]].values)
+        self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
 
     def __repr__(self):
         self.get_info()
@@ -29,18 +29,24 @@ class Cell3D:
     def _load_tdg(self, tdg_path):
         tdg = pd.read_csv(tdg_path, sep="\t", header=None, comment="#")
         tdg.columns = ["chrom", "pos", "x", "y", "z"]
-        tdg["chrom"] = tdg["chrom"].str.replace("\(mat\)", "a", regex=True)
-        tdg["chrom"] = tdg["chrom"].str.replace("\(pat\)", "b", regex=True)
+        tdg["chrom"] = tdg["chrom"].str.replace("\(pat\)", "a", regex=True)
+        tdg["chrom"] = tdg["chrom"].str.replace("\(mat\)", "b", regex=True)
         LE = LabelEncoder()
         tdg.chrom = pd.Categorical(tdg.chrom)
         tdg['chrom_code'] = LE.fit_transform(tdg['chrom'])
         return tdg
 
-    def _load_bed_fragments(path, resolution):
+    def _load_bed_fragments(path, resolution, type = "allelic_resolved"):
         fragments = pd.read_csv(path, sep="\t", header=None)
-        fragments.columns = ["chrom", "start", "end", "allele", "score", "strand"]
-        fragments = fragments.query("chrom.str.contains('chr')").query('allele != "."')
-        fragments = fragments.assign(chrom=np.where(fragments["allele"] == "0", fragments["chrom"] + "a", fragments["chrom"] + "b"))
+        fragments.columns = ["chrom", "start", "end", "allele", "score", "strand"][:len(fragments.columns)]
+        if type == "allelic_resolved":
+            fragments = fragments.query("chrom.str.contains('chr')").query('allele != "."')
+            fragments = fragments.assign(chrom=np.where(fragments["allele"] == "0", fragments["chrom"] + "a", fragments["chrom"] + "b"))
+        else:
+            fragments = pd.concat([
+                fragments.assign(chrom=lambda x: x["chrom"] + "a"),
+                fragments.assign(chrom=lambda x: x["chrom"] + "b")
+            ])
         fragments["pos"] = ((fragments["start"] + fragments["end"]) / 2 + (resolution / 2)) // resolution * resolution
         fragments["pos"] = fragments["pos"].astype(int)
         return fragments.groupby(["chrom", "pos"]).size().reset_index().rename(columns={0: "count"})
@@ -56,12 +62,12 @@ class Cell3D:
             CpG.assign(chrom=lambda x: x["chrom"] + "b")
         ])    
 
-    def add_bed_data(self, path, column_name, resolution=None):
+    def add_bed_data(self, path, column_name, resolution=None,type="allelic_resolved"):
         if resolution is None:
             resolution = self.resolution
         if column_name in self.tdg.columns:
             warnings.warn("Column {} already exists, will be overwritten".format(column_name))
-        fragments = Cell3D._load_bed_fragments(path, resolution)
+        fragments = Cell3D._load_bed_fragments(path, resolution,type)
         self.tdg = pd.merge(self.tdg, fragments, on=["chrom", "pos"], how="left")
         self.tdg[column_name] = self.tdg["count"].fillna(0)
         self.tdg = self.tdg.drop(columns=["count"], axis=1)
@@ -70,7 +76,7 @@ class Cell3D:
     def add_CpG_data(self, path):
         CpG = Cell3D._load_CpG(path)
         self.features.append("CpG")
-        self.tdg = pd.merge(self.tdg, CpG, on=["chrom", "pos"], how="left").dropna()
+        self.tdg = pd.merge(self.tdg, CpG, on=["chrom", "pos"], how="left")#.dropna()
 
     def add_density(self, radius):
         self.features.append("density_"+str(radius))
@@ -84,6 +90,25 @@ class Cell3D:
         self.tdg["density_"+str(radius)] = np.array(densities)
         return None
 
+    def add_feature_in_radius(self, feature, radius,type = "mean"):
+        """
+        feature: str
+        radius: float
+        type: str
+            "mean" or "sum"
+
+        Takes about 20 seconds for 250k points
+        """
+        indices_list = self.kdtree.query_ball_tree(self.kdtree, r=radius)
+        if type =="mean":
+            avgs = [self.tdg[feature].iloc[indices].mean() for indices in indices_list]
+        elif type =="sum":
+            avgs = [self.tdg[feature].iloc[indices].sum() for indices in indices_list]
+        else:
+            raise ValueError("type should be mean or sum")
+        self.tdg[feature + "_" + type + "_in_radius_" + str(radius)] = avgs
+        self.features.append(feature + "_avg_in_radius" + str(radius))
+        return None
 
     # mutate the Cell3D object
     def _point_cloud_rotation(point_cloud, x_angle=None,y_angle=None,z_angle=None):
@@ -130,11 +155,117 @@ class Cell3D:
                 slice_width = slice_width / 2 
                 tdg_temp = tdg_temp.query("x > -@slice_width & x < @slice_width")
 
-        return tdg_temp
+        return tdg_temp.copy()
     
     # analysis
-    #calc_rmsd = lambda x,y: np.sqrt(np.mean((x-y)**2))
-    def calculate_RMSD(*dataframes):
+
+    # data visualize
+    def fast_plot3D(ax,x,y,z,c,view=(0,0,0),**kwargs):
+        ax.scatter(x,y,z,c,**kwargs)
+        ax.view_init(*view)
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        return ax
+
+    # Visualize the Cell3D object
+    # 1. matplotlib
+
+    # 2. output to cif
+    def write_cif(self,outputpath = None):
+        """
+        Convert a DataFrame of 3D coordinates to a CIF file.
+        Parameters:
+            cellname : str
+            tdg : pandas.DataFrame containing at least for 'chrom', 'pos', 'x', 'y', 'z', 'CpG'
+            outputpath : str
+            resolution : int
+        Returns:
+            None and a output file to outputpath
+        """
+
+        cellname = self.cellname
+        tdg = self.tdg
+        resolution = self.resolution
+
+        if outputpath is None:
+            outputpath = "./" +cellname+".cif"
+
+        file_head_name ="data_" + cellname + "_res" + str(int(resolution/1000)) + "k"
+        # Create CIF format string block 1 
+        cif_str = "#\nloop_\n_entity_poly.entity_id\n_entity_poly.type\n_entity_poly.nstd_linkage\n_entity_poly.nstd_monomer\n_entity_poly.pdbx_seq_one_letter_code\n_entity_poly.pdbx_seq_one_letter_code_can\n_entity_poly.pdbx_strand_id\n_entity_poly.pdbx_target_identifier\n"
+        cif_str = file_head_name + "\n" + cif_str
+        # Get unique chroms
+        unique_chroms = tdg['chrom'].unique()
+        # Sort the array
+        def sort_chromosomes(chrom):
+            num_part = ''.join(filter(str.isdigit, chrom)) 
+            if 'X' in chrom:
+                num = 100  
+            elif 'Y' in chrom:
+                num = 101 
+            else:
+                num = int(num_part)
+            return (chrom[-1], num)  
+        
+        unique_chroms = sorted(unique_chroms, key=sort_chromosomes)
+        tdg["chrom"] = pd.Categorical(tdg["chrom"], categories=unique_chroms)
+        # Add each chrom as a new line in the CIF block
+        for i, chrom in enumerate(unique_chroms, start=1):
+            cif_str += f"{i} 'Chromatin' no no ? ? ? ?\n"
+
+
+        # Create CIF format string for the second block
+        cif_str2 = "#\nloop_\n_entity.id\n_entity.type\n_entity.src_method\n_entity.pdbx_description\n_entity.formula_weight\n_entity.pdbx_number_of_molecules\n_entity.pdbx_ec\n_entity.pdbx_mutation\n_entity.pdbx_fragment\n_entity.details\n"
+
+        # Add each chrom as a new line in the CIF block
+        for i, chrom in enumerate(unique_chroms, start=1):
+            # Determine if the chrom is maternal or paternal
+            chrom_type = 'maternal' if 'a' in chrom else 'paternal'
+            # Get the chrom number
+            chrom_num = ''.join(filter(str.isdigit, chrom))
+            if 'X' in chrom:
+                chrom_num = 'X'
+            elif 'Y' in chrom:
+                chrom_num = 'Y'
+            cif_str2 += f"{i} polymer man 'Chromosome{chrom_num} ({chrom_type})' ? ? ? ? ? ?\n"
+
+        #print(cif_str2)
+
+        # Continue from previous code
+
+        # Create CIF format string for the third block
+        cif_str3 = "#\nloop_\n_atom_site.group_PDB\n_atom_site.id\n_atom_site.type_symbol\n_atom_site.label_atom_id\n_atom_site.label_alt_id\n_atom_site.label_comp_id\n_atom_site.label_asym_id\n_atom_site.label_entity_id\n_atom_site.label_seq_id\n_atom_site.pdbx_PDB_ins_code\n_atom_site.Cartn_x\n_atom_site.Cartn_y\n_atom_site.Cartn_z\n_atom_site.B_iso_or_equiv\n"
+
+        # Create a dictionary to store the current index for each chrom
+        chrom_indices = {chrom: 0 for chrom in unique_chroms}
+
+        # Add each row of the DataFrame as a new line in the CIF block
+        for i, row in tdg.iterrows():
+            # Get the current index for this chrom
+            chrom_index = chrom_indices[row['chrom']] + 1
+            # Update the index for this chrom
+            chrom_indices[row['chrom']] = chrom_index
+            # Get the entity id for this chrom
+            entity_id = unique_chroms.index(row['chrom']) + 1
+            cif_str3 += f"ATOM {i+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row['CpG']}\n"
+
+        #print(cif_str3)
+
+        # Open the file in write mode
+        with open(outputpath, 'w') as f:
+            # Write the three blocks to the file
+            f.write(cif_str)
+            f.write(cif_str2)
+            f.write(cif_str3)
+
+        print("Done " + cellname)
+        return None
+
+
+# Analysis Functions
+
+def calculate_RMSD(*dataframes):
         """
         Calculate RMSD for a list of dataframes.
 
@@ -182,17 +313,28 @@ class Cell3D:
         
         return rms_rmsd, median_rmsd
 
-    # data visualize
-    def fast_plot3D(ax,x,y,z,c,view=(0,0,0),**kwargs):
-        ax.scatter(x,y,z,c,**kwargs)
-        ax.view_init(*view)
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        return ax
+def feature_radial_distribution(cell, feature,random = False,random_seed = 42):
+    """
+    Calculate the radial distribution of a feature in a Cell3D object.
 
-    # Visualize the Cell3D object
-    # 1. matplotlib
+    Parameters:
+        cell : Cell3D object
+        feature : str
+            Name of the feature to calculate radial distribution for
+    Returns:
+        pd.DataFrame : DataFrame containing the radial distribution
+    """
+    # 1. get center of mass
+    tdg = cell.get_data()
+    center = tdg[["x", "y", "z"]].mean()
+    # 2. get distance to center
+    tdg["radial_distance"] = np.sqrt((tdg["x"] - center["x"]) ** 2 + (tdg["y"] - center["y"]) ** 2 + (tdg["z"] - center["z"]) ** 2) 
+    tdg["radial_distance"] = tdg["radial_distance"] / tdg["radial_distance"].mean()
+    # 3. get radial distribution
+    if random:
+        np.random.seed(random_seed)
+        tdg[feature] = tdg[feature].values[np.random.permutation(len(tdg[feature]))]
+        #print("This is a randomization test.")
 
-    # 2. output to cif
-
+    tdg["feature_radial_distribution"] = tdg[feature] / tdg[feature].mean() * tdg["radial_distance"]
+    return tdg
