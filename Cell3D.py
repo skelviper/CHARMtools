@@ -4,6 +4,7 @@ from sklearn.preprocessing import LabelEncoder
 import warnings
 from scipy.spatial import cKDTree
 import rmsd
+import pybedtools
 
 
 class Cell3D:
@@ -73,6 +74,46 @@ class Cell3D:
         self.tdg = self.tdg.drop(columns=["count"], axis=1)
         self.features.append(column_name)
 
+    def add_bedGraph_data(self,path,column_name, resolution=None,type="allelic_resolved"):
+        """
+        Add features from bedGraph file to the Cell3D object.
+
+        Parameters:
+            path : str
+                Path to the bedGraph file
+            column_name : str
+                Name of the column to be added
+            resolution : int
+                Resolution of the bedGraph file, default is the resolution of the Cell3D object
+            type : str
+                "allelic_resolved" or "non_allelic_resolved" not implemented yet
+
+        Returns:
+            None
+        """
+        if resolution is None:
+            resolution = self.resolution
+        positions = self.tdg[["chrom","pos"]].copy()
+        positions.loc[:, "start"] = positions["pos"] - resolution//2
+        positions.loc[:, "end"] = positions["pos"] + resolution//2
+        positions = positions[["chrom","start","end"]]
+
+        bedgraph = pd.read_csv(path,sep="\t",header=None)
+        bedgraph.columns = ["chrom","start","end",column_name]
+
+        bedgraph = pd.concat([
+            bedgraph.assign(chrom=lambda x: x["chrom"] + "a"),
+            bedgraph.assign(chrom=lambda x: x["chrom"] + "b")
+        ])
+        # merge positions and bedgraph
+        positions_bed = pybedtools.BedTool.from_dataframe(positions)
+        bedgraph_bed = pybedtools.BedTool.from_dataframe(bedgraph)
+        merged_bed = positions_bed.intersect(bedgraph_bed,wa=True,wb=True)
+        newcol = merged_bed.to_dataframe()[["chrom","start","end","thickStart"]].groupby(["chrom","start","end"]).mean().reset_index()
+        newcol.columns = ["chrom","start","end",column_name]
+        newcol["pos"] = newcol["start"] + resolution//2
+        self.tdg = pd.merge(self.tdg,newcol[["chrom","pos",column_name]],on=["chrom","pos"],how="left")
+
     def add_CpG_data(self, path):
         CpG = Cell3D._load_CpG(path)
         self.features.append("CpG")
@@ -92,12 +133,20 @@ class Cell3D:
 
     def add_feature_in_radius(self, feature, radius,type = "mean"):
         """
-        feature: str
-        radius: float
-        type: str
-            "mean" or "sum"
+        Smooth given feature by averaging or summing over a sphere of given radius.
 
-        Takes about 20 seconds for 250k points
+        Parameters:
+            feature: str
+                Name of the feature to be smoothed
+            radius: float
+                Radius of the sphere
+            type: str
+                "mean" or "sum"
+        Additional information:
+            Takes about 20 seconds for 250k points
+        
+        Returns:
+            None
         """
         indices_list = self.kdtree.query_ball_tree(self.kdtree, r=radius)
         if type =="mean":
@@ -113,10 +162,14 @@ class Cell3D:
     # mutate the Cell3D object
     def _point_cloud_rotation(point_cloud, x_angle=None,y_angle=None,z_angle=None):
         """
-        point_cloud: numpy array of shape (n,3)
-        [xyz]_angle: float in radian
-
         Rotate point cloud by x,y,z angle and return the rotated point cloud in numpy array of shape (n,3)
+
+        Parameters:
+            point_cloud: numpy array of shape (n,3)
+            [xyz]_angle: float in radian
+
+        Returns:
+            point_cloud: numpy array of shape (n,3)
         """
         if x_angle:
             rotation_matrix = np.array([[1,0,0],[0,np.cos(x_angle),-np.sin(x_angle)],[0,np.sin(x_angle),np.cos(x_angle)]])
@@ -133,6 +186,25 @@ class Cell3D:
     # o
     def get_data(self,query = "",slice=False,random_slice=False,slice_width = 3,rotate=False,
                  rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
+        """
+        Get the data of the Cell3D object.
+
+        Parameters:
+            query: str
+                Query string to filter the data
+            slice: bool
+                Whether to slice the data
+            random_slice: bool
+                Whether to slice randomly
+            slice_width: float
+                Width of the slice
+            rotate: bool
+                Whether to rotate the data
+            rotate_[xyz]_angle: float
+                Rotation angle in radian
+        Returns:
+            pandas.DataFrame
+        """
         if query != "":
             tdg_temp = self.tdg.query(query)
         else:
