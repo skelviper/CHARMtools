@@ -84,7 +84,7 @@ def sort_chromosomes(chrom):
     return (chrom[-1], num)  
 # Return a tuple where the first element is 'a' or 'b' and the second element is the number
 
-def tdg2cif(cellname,tdg,outputpath = None ,resolution=200000):
+def tdg2cif(cellname,tdg,factor_b, outputpath = None ,resolution=200000):
     """Convert a DataFrame of 3D coordinates to a CIF file."""
 
     if outputpath is None:
@@ -137,7 +137,7 @@ def tdg2cif(cellname,tdg,outputpath = None ,resolution=200000):
         chrom_indices[row['chrom']] = chrom_index
         # Get the entity id for this chrom
         entity_id = unique_chroms.index(row['chrom']) + 1
-        cif_str3 += f"ATOM {i+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row['CpG']}\n"
+        cif_str3 += f"ATOM {i+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row[factor_b]}\n"
 
     #print(cif_str3)
 

@@ -209,3 +209,89 @@ def parse_3dg(filename:str)->pd.DataFrame:
 def write_3dg(pairs:pd.DataFrame, outname:str):
     pairs.to_csv(outname, sep="\t",header=None)
     return 0
+
+def parquet2pairs(parquet_path,pairs_path):
+    cell = pd.read_parquet(parquet_path)
+    temp = cell#[["read_name","align1_fragment_start","align1_fragment_end","align1_chrom","align1_haplotype","align2_fragment_start","align2_fragment_end","align2_chrom","align2_haplotype"]]
+    temp = temp.assign(pos1 = (temp.align1_fragment_start + temp.align1_fragment_end) // 2) 
+    temp = temp.assign(pos2 = (temp.align2_fragment_start + temp.align2_fragment_end) // 2)
+    temp = temp[["read_name","align1_chrom","pos1","align2_chrom","pos2","align1_strand","align2_strand","align1_haplotype","align2_haplotype"]]
+    temp["align1_strand"] = temp["align1_strand"].replace(True, '+')
+    temp["align1_strand"] = temp["align1_strand"].replace(False, '-')
+    temp["align2_strand"] = temp["align2_strand"].replace(True, '+')
+    temp["align2_strand"] = temp["align2_strand"].replace(False, '-')
+    temp['align1_haplotype'] = temp['align1_haplotype'].replace(-1, '.')
+    temp['align2_haplotype'] = temp['align2_haplotype'].replace(-1, '.')
+    temp['align1_haplotype'] = temp['align1_haplotype'].replace(1, '0')
+    temp['align2_haplotype'] = temp['align2_haplotype'].replace(2, '1')
+    temp.columns = ["readID","chr1","pos1","chr2","pos2","strand1","strand2","phase0","phase1"]
+
+    # only keep autosomes and chrX and chrY
+    temp = temp[temp.chr1.str.contains("chr[0-9]+|chrX|chrY")]
+    temp = temp[temp.chr2.str.contains("chr[0-9]+|chrX|chrY")]
+    unique_chroms = set(list(temp['chr1'].unique()) + list(temp['chr2'].unique())) 
+    unique_chroms = sorted(unique_chroms, key=lambda x: (int(x[3:]) if x[3:].isdigit() else float('inf'), x))
+    temp["chr1"] = pd.Categorical(temp["chr1"], categories=unique_chroms)
+    temp["chr2"] = pd.Categorical(temp["chr2"], categories=unique_chroms)
+    temp = temp.sort_values(["chr1","chr2","pos1","pos2"])
+
+        #write tsv with header
+        # for GRCh38
+    header = """## pairs format v1.0  
+#sorted: chr1-chr2-pos1-pos2 
+#shape: upper triangle
+#chromosome: chr1 248956422
+#chromosome: chr2 242193529
+#chromosome: chr3 198295559
+#chromosome: chr4 190214555
+#chromosome: chr5 181538259
+#chromosome: chr6 170805979
+#chromosome: chr7 159345973
+#chromosome: chr8 145138636
+#chromosome: chr9 138394717
+#chromosome: chr10 133797422
+#chromosome: chr11 135086622
+#chromosome: chr12 133275309
+#chromosome: chr13 114364328
+#chromosome: chr14 107043718
+#chromosome: chr15 101991189
+#chromosome: chr16 90338345
+#chromosome: chr17 83257441
+#chromosome: chr18 80373285
+#chromosome: chr19 58617616
+#chromosome: chr20 64444167
+#chromosome: chr21 46709983
+#chromosome: chr22 50818468
+#chromosome: chrX 156040895
+#chromosome: chrY 57227415
+"""
+
+    temp.attrs['comments'] = [header,""]
+
+
+    def write_pairs(pairs:pd.DataFrame, out_name:str):
+        '''
+        write dataframe to tab delimited zipped file
+        reserve comment lines, no dataframe index
+        headers store in last comment line
+        need to sort with upper triangle label
+        '''
+        #sys.stderr.write("write to %s\n" % out_name)
+        with gzip.open(out_name,"wt") as f:
+            pairs.attrs["comments"].pop()
+            pairs.attrs["comments"].append("#columns:" + "\t".join(pairs.columns) + "\n")
+            f.write("".join(pairs.attrs["comments"]))
+            pairs.to_csv(f, sep="\t", header=False, index=False, mode="a")
+
+    #temp.to_csv("test.pairs.gz",sep="\t",index=False,header=None)
+    write_pairs(temp, pairs_path)
+    return None
+
+def pairs_describe(pairs):
+    """%
+    Generate basic statistics of pairs including contacts number, inter_pairs_ratio and non_contact_ratio.
+    """
+    contacts_number = pairs.shape[0]
+    inter_pairs_ratio = pairs[pairs['chr1'] != pairs['chr2']].shape[0] / contacts_number
+    non_contact_ratio = pairs[(pairs['chr1'] == pairs['chr2']) & (pairs["pos2"] - pairs["pos1"] < 1000)].shape[0] / contacts_number
+    return [pairs.attrs["name"],contacts_number, inter_pairs_ratio, non_contact_ratio]

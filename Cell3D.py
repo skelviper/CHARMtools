@@ -98,21 +98,35 @@ class Cell3D:
         positions.loc[:, "end"] = positions["pos"] + resolution//2
         positions = positions[["chrom","start","end"]]
 
-        bedgraph = pd.read_csv(path,sep="\t",header=None)
-        bedgraph.columns = ["chrom","start","end",column_name]
+        if type == "allelic_resolved":
+            bedgraph = pd.read_csv(path,sep="\t",header=None)
+            bedgraph.columns = ["chrom","start","end","allele",column_name]
+            bedgraph = bedgraph.query("chrom.str.contains('chr')").query('allele != "."')
+            bedgraph = bedgraph.assign(chrom=np.where(bedgraph["allele"] == 0, bedgraph["chrom"] + "a", bedgraph["chrom"] + "b"))
+            bedgraph = bedgraph[["chrom","start","end",column_name]]
+            #print(bedgraph.query('chrom.str.contains("b") & RNA > 0'))
 
-        bedgraph = pd.concat([
-            bedgraph.assign(chrom=lambda x: x["chrom"] + "a"),
-            bedgraph.assign(chrom=lambda x: x["chrom"] + "b")
-        ])
+        else: 
+            bedgraph = pd.read_csv(path,sep="\t",header=None)
+            bedgraph.columns = ["chrom","start","end",column_name]
+            bedgraph = pd.concat([
+                bedgraph.assign(chrom=lambda x: x["chrom"] + "a"),
+                bedgraph.assign(chrom=lambda x: x["chrom"] + "b")
+            ])
+
+        
         # merge positions and bedgraph
         positions_bed = pybedtools.BedTool.from_dataframe(positions)
         bedgraph_bed = pybedtools.BedTool.from_dataframe(bedgraph)
         merged_bed = positions_bed.intersect(bedgraph_bed,wa=True,wb=True)
-        newcol = merged_bed.to_dataframe()[["chrom","start","end","thickStart"]].groupby(["chrom","start","end"]).mean().reset_index()
+        newcol = merged_bed.to_dataframe()[["chrom","start","end","thickStart"]].groupby(["chrom","start","end"]).sum().reset_index()
         newcol.columns = ["chrom","start","end",column_name]
         newcol["pos"] = newcol["start"] + resolution//2
-        self.tdg = pd.merge(self.tdg,newcol[["chrom","pos",column_name]],on=["chrom","pos"],how="left")
+        #self.tdg =
+        temp = pd.merge(self.tdg,newcol[["chrom","pos",column_name]],on=["chrom","pos"],how="left")
+        temp[column_name] = temp[column_name].fillna(0)
+        self.tdg = temp
+        self.features.append(column_name)
 
     def add_CpG_data(self, path):
         CpG = Cell3D._load_CpG(path)
@@ -244,7 +258,7 @@ class Cell3D:
     # 1. matplotlib
 
     # 2. output to cif
-    def write_cif(self,outputpath = None):
+    def write_cif(self,factor_b,outputpath = None):
         """
         Convert a DataFrame of 3D coordinates to a CIF file.
         Parameters:
@@ -320,7 +334,7 @@ class Cell3D:
             chrom_indices[row['chrom']] = chrom_index
             # Get the entity id for this chrom
             entity_id = unique_chroms.index(row['chrom']) + 1
-            cif_str3 += f"ATOM {i+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row['CpG']}\n"
+            cif_str3 += f"ATOM {i+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row[factor_b]}\n"
 
         #print(cif_str3)
 
@@ -335,6 +349,72 @@ class Cell3D:
         return None
 
 
+    def calc_feature_distances(self,feature_key,quantile,random_seed=0,k=10):
+        """
+        INPUT:
+            df: charm tdg dataframe from charm_get_3dplot_data
+            feature_key: feature to calculate distance
+            threshold: threshold to divide points into two groups
+        OUTPUT:
+            distances: np.array of inter-chromosomal distances of sampled points with feature > threshold and random distances
+        """
+        tdg = self.tdg
+        selected_points = tdg.sort_values(feature_key,ascending=False).iloc[:int(tdg.shape[0]*quantile)]
+        kdtree_seleted_points = cKDTree(selected_points[['x', 'y', 'z']])
+
+        random_points = tdg.sample(n=selected_points.shape[0], random_state=random_seed)
+        kdtree_random_points = cKDTree(random_points[['x', 'y', 'z']])
+
+        distances_selected = kdtree_seleted_points.query(selected_points[['x', 'y', 'z']], k=k)[0].mean(axis=1)
+        distances_random = kdtree_random_points.query(random_points[['x', 'y', 'z']], k=k)[0].mean(axis=1)
+        return np.array([distances_selected, distances_random])
+    
+#Example
+# from scipy.stats import ks_2samp
+# distances_cell = cell.calc_feature_distances("Random", 0.01, random_seed=1,k=20)
+# #distances_cell_random = cell.calc_feature_distances("Random", 0.05, random_seed=1,k=20)
+# #distances = distances_cell[0] 
+# #random_distances = distances_cell_random[0]
+# distances, random_distances = distances_cell[0], distances_cell[1]
+# fig, axes = plt.subplots(figsize=(6, 3), ncols=2, dpi=120)
+
+# # histogram of vector, use fraction as y axis
+# ax1 = axes[0]
+# ax1.hist(random_distances, bins=20, color="grey", alpha=0.5, label="random")
+# ax1.hist(distances, bins=20, color="red", alpha=0.5, label="H3K9me3")
+# ax1.set_xlabel("Distance")
+# ax1.set_ylabel("Frequency")
+# #ax1.set_xlim(0,4)
+# ax1.legend()
+
+# # 计算累积分布
+# hist_random, edges_random = np.histogram(random_distances, bins=20, density=True)
+# hist_open, edges_open = np.histogram(distances, bins=20, density=True)
+# cdf_random = np.cumsum(hist_random)/np.sum(hist_random)
+# cdf_open = np.cumsum(hist_open)/np.sum(hist_open)
+
+# # 绘制累积分布曲线
+# ax2 = axes[1]
+# ax2.plot(edges_random[:-1], cdf_random, color="grey", alpha=0.5, label="random")
+# ax2.plot(edges_open[:-1], cdf_open, color="red", alpha=0.5, label="H3K9me3")
+# ax2.set_xlabel("Distance")
+# ax2.set_ylabel("Cumulative frequency")
+# #ax2.set_xlim(0,4)
+# ax2.legend()
+
+# # 进行Kolmogorov-Smirnov检验
+# ks_stat, ks_pval = ks_2samp(random_distances, distances)
+# print(f"KS statistic: {ks_stat}")
+# print(f"KS test p-value: {ks_pval}")
+# # t检验
+# from scipy.stats import ttest_ind
+# t_stat, t_pval = ttest_ind(random_distances, distances)
+# print(f"t statistic: {t_stat}")
+# print(f"t test p-value: {t_pval}")
+
+# plt.tight_layout()
+# plt.show()
+    
 # Analysis Functions
 
 def calculate_RMSD(*dataframes):
@@ -410,3 +490,85 @@ def feature_radial_distribution(cell, feature,random = False,random_seed = 42):
 
     tdg["feature_radial_distribution"] = tdg[feature] / tdg[feature].mean() * tdg["radial_distance"]
     return tdg
+
+
+def calc_feature_distances(cell, feature_key, threshold, points_num_per_chrom=50, points_num_other_chrom=100, random_seed=0):
+    """
+    INPUT: 
+        df: charm tdg dataframe from charm_get_3dplot_data
+        feature_key: feature to calculate distance
+        threshold: threshold to divide points into two groups
+    OUTPUT:
+        distances: np.array of inter-chromosomal distances of sampled points with feature > threshold and random distances
+
+    """
+    from scipy.spatial import distance_matrix
+    from scipy.stats import mannwhitneyu
+    import matplotlib.pyplot as plt
+    # generate randomized inter-distance
+    np.random.seed(random_seed)
+    df = cell.get_data()
+    random_distances = []
+    for chrom in set(df.chrom.values):
+        chrom_points = df.query("chrom == @chrom").sample(n=min(len(df.query("chrom == @chrom")), points_num_per_chrom), random_state=random_seed)[["x", "y", "z"]].values
+        else_chrom_points = df.query("chrom != @chrom").sample(n=min(len(df.query("chrom != @chrom")), points_num_other_chrom), random_state=random_seed)[["x", "y", "z"]].values
+        random_distances.extend(distance_matrix(chrom_points, else_chrom_points).flatten())
+        #random_distances.extend(distance_matrix(chrom_points, chrom_points).flatten())
+    random_distances = np.array(random_distances)
+
+    df['status'] = np.where(df[feature_key] > threshold, 'open', 'close')
+    df = df.query("status == 'open'")
+
+    distances = []
+    for chrom in set(df.chrom.values):
+        chrom_points = df.query("chrom == @chrom").sample(n=min(len(df.query("chrom == @chrom")), points_num_per_chrom), random_state=random_seed)[["x", "y", "z"]].values
+        else_chrom_points = df.query("chrom != @chrom").sample(n=min(len(df.query("chrom != @chrom")), points_num_other_chrom), random_state=random_seed)[["x", "y", "z"]].values
+        distances.extend(distance_matrix(chrom_points, else_chrom_points).flatten())
+        #distances.extend(distance_matrix(chrom_points, chrom_points).flatten())
+    distances = np.array(distances)
+    print("Mean distance of random points: %.2f" % np.mean(random_distances))
+    print("Mean distance of feature points: %.2f" % np.mean(distances))
+    # wilcox test of random vs open
+    # Perform the Mann-Whitney U test
+    U_stat, p_val = mannwhitneyu(random_distances, distances)
+
+    print(f"Mann-Whitney U statistic: {U_stat}")
+    print(f"Mann-Whitney test p-value: {p_val}")
+
+    return np.array([distances, np.random.choice(random_distances, size=distances.shape[0], replace=False)])
+
+
+### Eample usage ###
+# distances_cell = calc_feature_distances(tdg,"count_ct", 1, points_num_per_chrom=50, points_num_other_chrom=100, random_seed=0)
+# distances,random_distances = distances_cell
+# fig, axes = plt.subplots(figsize=(6, 3), ncols=2, dpi=120)
+
+# histogram of vector, use fraction as y axis
+# ax1 = axes[0]
+# ax1.hist(random_distances, bins=20, color="grey", alpha=0.5, label="random")
+# ax1.hist(distances, bins=20, color="red", alpha=0.5, label="H3K9me3")
+# ax1.set_xlabel("Distance")
+# ax1.set_ylabel("Frequency")
+# ax1.legend()
+
+# # 计算累积分布
+# hist_random, edges_random = np.histogram(random_distances, bins=20, density=True)
+# hist_open, edges_open = np.histogram(distances, bins=20, density=True)
+# cdf_random = np.cumsum(hist_random)/np.sum(hist_random)
+# cdf_open = np.cumsum(hist_open)/np.sum(hist_open)
+
+# # 绘制累积分布曲线
+# ax2 = axes[1]
+# ax2.plot(edges_random[:-1], cdf_random, color="grey", alpha=0.5, label="random")
+# ax2.plot(edges_open[:-1], cdf_open, color="red", alpha=0.5, label="H3K9me3")
+# ax2.set_xlabel("Distance")
+# ax2.set_ylabel("Cumulative frequency")
+# ax2.legend()
+
+# # 进行Kolmogorov-Smirnov检验
+# ks_stat, ks_pval = ks_2samp(random_distances, distances)
+# print(f"KS statistic: {ks_stat}")
+# print(f"KS test p-value: {ks_pval}")
+
+# plt.tight_layout()
+# plt.show()
