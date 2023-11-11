@@ -8,6 +8,7 @@ import scipy as sp
 import cooler
 from scipy import ndimage
 from scipy import signal
+from scipy import spatial
 import tqdm
 
 # compare matrix
@@ -130,6 +131,49 @@ def ctg_impute(W, lambda_=4):
 
     # Calculate the limit of S as k approaches infinity
     S = U @ (Lambda / (np.exp(lambda_) - Lambda)) @ np.linalg.inv(U)
+    
     CTG_distance_matrix = spatial.distance.squareform(spatial.distance.pdist(S, metric='cityblock'))
 
     return CTG_distance_matrix
+
+def ctg_impute_v2(W, iterations=20, alpha=0.3):
+    W = W.astype(np.float64)
+    def normalize_matrix(W):
+        """ Normalize the matrix W by column. """
+        n = W.shape[0]
+        for col in range(n):
+            col_sum = np.sum(W[:, col])
+            if np.abs(col_sum) > 1e-6:
+                W[:, col] /= col_sum
+        return W
+
+    def matrix_iteration(W, iterations, alpha):
+        """ Perform matrix iterations. """
+        n = W.shape[0]
+        sum_matrix = np.zeros_like(W)
+        k_matrix = np.copy(W)
+
+        for i in range(iterations):
+            factor = np.exp(-alpha * (i + 1))
+            sum_matrix += factor * k_matrix
+            k_matrix = np.dot(k_matrix, W)
+        return sum_matrix
+
+    def compute_L1_distance(matrix):
+        """ Compute L1 distance matrix. """
+        n = matrix.shape[0]
+        L1_matrix = np.zeros((n, n))
+
+        for i in range(n):
+            for j in range(n):
+                L1_matrix[i, j] = np.sum(np.abs(matrix[:, i] - matrix[:, j]))
+        return L1_matrix
+    
+        #L1_matrix = np.sum(np.abs(matrix[:, np.newaxis] - matrix[np.newaxis, :]), axis=2)
+        return L1_matrix
+
+    normalized_W = normalize_matrix(W)
+    iterated_matrix = matrix_iteration(normalized_W, iterations, alpha)
+    L1_distance_matrix = compute_L1_distance(iterated_matrix)
+
+    return L1_distance_matrix

@@ -14,6 +14,7 @@ class Cell3D:
         self.resolution = resolution
         self.features = []
         self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
+        self.chrom_length = None
 
     def __repr__(self):
         self.get_info()
@@ -28,7 +29,13 @@ class Cell3D:
 
     # Construct a Cell3D object
     def _load_tdg(self, tdg_path):
-        tdg = pd.read_csv(tdg_path, sep="\t", header=None, comment="#")
+        if isinstance(tdg_path, pd.DataFrame):
+            tdg = tdg_path.copy()
+        elif isinstance(tdg_path, str):
+            tdg = pd.read_csv(tdg_path, sep="\t", header=None, comment="#")
+        else:
+            raise ValueError("tdg_path should be a pandas.DataFrame or a string")
+        
         tdg.columns = ["chrom", "pos", "x", "y", "z"]
         tdg["chrom"] = tdg["chrom"].str.replace("\(pat\)", "a", regex=True)
         tdg["chrom"] = tdg["chrom"].str.replace("\(mat\)", "b", regex=True)
@@ -173,6 +180,40 @@ class Cell3D:
         self.features.append(feature + "_avg_in_radius" + str(radius))
         return None
 
+    def add_chrom_length(self,chrom_length_path):
+        chrom_length = pd.read_csv(chrom_length_path,sep="\t",header=None)
+        chrom_length.columns = ["chrom","size"]
+        self.features.append("chrom_length")
+        self.chrom_length = chrom_length
+
+    def calc_distance_matrix(self,chrom):
+        """
+        INPUT:
+            cell: Cell3D object
+            chrom: str, chromosome name
+        OUTPUT:
+            distance matrix of a given chrom
+        TODO:
+            return distance matrix of specific region or band 
+        """
+
+        if self.chrom_length is None:
+            raise ValueError("chrom_length is not available, please run add_chrom_length first")
+        else:
+            matsize = self.chrom_length.query("chrom == @chrom")["size"].values[0] // self.resolution + 1
+            reconstruct_df = self.tdg.query("chrom == @chrom").copy()
+            reconstruct_df["pos"] = reconstruct_df["pos"] // self.resolution
+            coordinates = reconstruct_df.iloc[:, 2:5].values
+            diff = coordinates[:, np.newaxis, :] - coordinates[np.newaxis, :, :]
+            dist_matrix_reconstruct = np.linalg.norm(diff, axis=-1)
+            full_dist_matrix = np.full((matsize, matsize), np.nan)
+            for i, pos_i in enumerate(reconstruct_df['pos']):
+                for j, pos_j in enumerate(reconstruct_df['pos']):
+                    full_dist_matrix[pos_i, pos_j] = dist_matrix_reconstruct[i, j]
+        
+            return full_dist_matrix
+
+    
     # mutate the Cell3D object
     def _point_cloud_rotation(point_cloud, x_angle=None,y_angle=None,z_angle=None):
         """
@@ -572,3 +613,27 @@ def calc_feature_distances(cell, feature_key, threshold, points_num_per_chrom=50
 
 # plt.tight_layout()
 # plt.show()
+
+def mat_cor_with_na(mat1,mat2):
+    # Calculate distance matrices
+    distance_matrix_1 = mat1.flatten()
+    distance_matrix_2 = mat2.flatten()
+
+    # Replace inf values with nan
+    distance_matrix_1 = np.where(np.isinf(distance_matrix_1), np.nan, distance_matrix_1)
+    distance_matrix_2 = np.where(np.isinf(distance_matrix_2), np.nan, distance_matrix_2)
+
+    # Remove any NaN values from both arrays (only where both have NaNs in the same position)
+    mask = ~np.isnan(distance_matrix_1) & ~np.isnan(distance_matrix_2)
+    distance_matrix_1 = distance_matrix_1[mask]
+    distance_matrix_2 = distance_matrix_2[mask]
+
+    # Check if there are any remaining NaNs or infs
+    if not np.isfinite(distance_matrix_1).all() or not np.isfinite(distance_matrix_2).all():
+        raise ValueError("The input arrays contain infs or NaNs after preprocessing.")
+
+    # Now you can safely call pearsonr
+    pearsonr_value,_ = stats.pearsonr(distance_matrix_1, distance_matrix_2)
+    spearmanr_value,_ = stats.spearmanr(distance_matrix_1, distance_matrix_2)
+
+    return [pearsonr_value,spearmanr_value]
