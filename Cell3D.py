@@ -301,114 +301,16 @@ class Cell3D:
     # analysis
 
     # data visualize
-    def plot3d(cell, color_by, resolution=200000, smooth=True, smoothness=2,
-                                            spline_degree=3,cmap="viridis",title='3D Chromatin Structure Visualization',
-                                            vmax=None,vmin=None):
+    def plot3D(self,query=None,**kwargs):
         """
-        Function to plot a 3D chromatin structure using Plotly. Supports both smooth and straight line
-        representations. The plot is colored based on a specified column and allows interactive manipulation.
-
-        :param dataframe: DataFrame containing the chromatin data.
-        :param color_by: Column name in the dataframe to color the plot by.
-        :param resolution: Resolution for determining continuity. Points closer than this
-                        in the 'pos' column are considered continuous.
-        :param smooth: Boolean to determine if the lines should be smooth or straight.
-        :param smoothness: Number of points to interpolate between two consecutive points.
-        :param spline_degree: Degree of the spline curve.
-        :param cmap: Colormap to use for coloring the plot.
-        :param title: Title for the plot.
+        Plot the 3D structure of the Cell3D object.
         """
-        import plotly.graph_objects as go
-        from plotly.subplots import make_subplots
-        from scipy.interpolate import splprep, splev
-        import plotly.express as px
-
-        # Creating a Plotly figure
-        fig = make_subplots(rows=1, cols=1, specs=[[{'type': 'scatter3d'}]])
-        # if cell is not a pd.DataFrame
-        if not isinstance(cell, pd.DataFrame):
-            try:
-                cell = cell.get_data()
-            except:
-                raise ValueError("cell should be a pandas.DataFrame or a Cell3D object")
-
-        dataframe = cell.copy()
-        # Defining a colormap based on the color_by column
-        # color_scale = 'Viridis' if dataframe[color_by].dtype.kind in 'biufc' else 'Plotly3'
-        if dataframe[color_by].dtype.kind in 'biufc':
-            # Use a continuous colorscale for numeric data
-            color_scale = cmap
-            if vmax is None:
-                vmax = dataframe[color_by].quantile(0.95)
-            if vmin is None:
-                vmin = dataframe[color_by].quantile(0.05)
-            dataframe[color_by] = np.clip(dataframe[color_by], vmin, vmax)
+        if query is None:
+            plot3d(cell = self.tdg, **kwargs)
         else:
-            # For categorical data, create a discrete color map
-            unique_categories = dataframe[color_by].unique()
-            # str to sth like plotly_utils.colors.qualitative.Plotly
-            color_scale = px.colors.sequential.Rainbow
-            color_map = {category: color_scale[i % len(color_scale)] for i, category in enumerate(unique_categories)}
+            plot3d(cell = self.tdg.query(query), **kwargs)
 
-
-            # Grouping data by chromosome
-        grouped_data = dataframe.groupby('chrom')
-        for chrom, group in grouped_data:
-            group = group.sort_values('pos')
-            pos_diff = group['pos'].diff().fillna(0)
-            break_indices = np.where(pos_diff > resolution)[0]
-            segments = np.split(group, break_indices)
-
-            # 初始化存储合并后的坐标点
-            x_all, y_all, z_all, color_values_all = [], [], [], []
-
-            for segment in segments:
-                if len(segment) < 2:
-                    continue
-
-                if smooth:
-                    if len(segment) <= spline_degree:
-                        continue
-                    x, y, z = segment['x'].values, segment['y'].values, segment['z'].values
-                    tck, _ = splprep([x, y, z], s=smoothness, k=spline_degree)
-                    u_new = np.linspace(0, 1, (len(segment) - 1) * 20 + 1)
-                    x_new, y_new, z_new = splev(u_new, tck)
-                    
-                    x_all.extend(x_new)
-                    y_all.extend(y_new)
-                    z_all.extend(z_new)
-
-                    # Adjust color values for interpolated points
-                    if dataframe[color_by].dtype.kind in 'biufc':
-                        color_values = np.repeat(segment[color_by].values[:-1], 20)
-                    else:
-                        color_values = [color_map[val] for val in segment[color_by].values[:-1]]
-                        color_values = np.repeat(color_values, 20, axis=0)
-
-                    color_values_all.extend(color_values)
-                    #print(len(color_values_all)
-
-                else:
-                    # 直接使用原始点
-                    x_all.extend(segment['x'])
-                    y_all.extend(segment['y'])
-                    z_all.extend(segment['z'])
-                    if dataframe[color_by].dtype.kind in 'biufc':
-                        color_values_all.extend(segment[color_by].values)
-                    else:
-                        color_values_all.extend([color_map[val] for val in segment[color_by].values])
-
-            fig.add_trace(go.Scatter3d(x=x_all, y=y_all, z=z_all,
-                                    mode='lines',
-                                    line=dict(color=color_values_all, colorscale=color_scale, width=5),
-                                    name=chrom))
-
-        fig.update_layout(title=title,
-                        scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'),
-                        width=800, height=800)
-        fig.update_scenes(aspectmode="data")
-        fig.show()
-
+        
 
 
     # 2. output to cif
@@ -749,3 +651,113 @@ def mat_cor_with_na(mat1,mat2):
     spearmanr_value,_ = stats.spearmanr(distance_matrix_1, distance_matrix_2)
 
     return [pearsonr_value,spearmanr_value]
+
+def plot3d(cell, color_by, resolution=200000, smooth=True, smoothness=2,
+            spline_degree=3,cmap="viridis",title='3D Chromatin Structure Visualization',
+            vmax=None,vmin=None,width = 5):
+    """
+    Function to plot a 3D chromatin structure using Plotly. Supports both smooth and straight line
+    representations. The plot is colored based on a specified column and allows interactive manipulation.
+
+    :param dataframe: DataFrame containing the chromatin data.
+    :param color_by: Column name in the dataframe to color the plot by.
+    :param resolution: Resolution for determining continuity. Points closer than this
+                    in the 'pos' column are considered continuous.
+    :param smooth: Boolean to determine if the lines should be smooth or straight.
+    :param smoothness: Number of points to interpolate between two consecutive points.
+    :param spline_degree: Degree of the spline curve.
+    :param cmap: Colormap to use for coloring the plot.
+    :param title: Title for the plot.
+    """
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
+    from scipy.interpolate import splprep, splev
+    import plotly.express as px
+
+    # Creating a Plotly figure
+    fig = make_subplots(rows=1, cols=1, specs=[[{'type': 'scatter3d'}]])
+    # if cell is not a pd.DataFrame
+    if not isinstance(cell, pd.DataFrame):
+        try:
+            cell = cell.get_data()
+        except:
+            raise ValueError("cell should be a pandas.DataFrame or a Cell3D object")
+
+    dataframe = cell.copy()
+    # Defining a colormap based on the color_by column
+    # color_scale = 'Viridis' if dataframe[color_by].dtype.kind in 'biufc' else 'Plotly3'
+    if dataframe[color_by].dtype.kind in 'biufc':
+        # Use a continuous colorscale for numeric data
+        color_scale = cmap
+        if vmax is None:
+            vmax = dataframe[color_by].quantile(0.95)
+        if vmin is None:
+            vmin = dataframe[color_by].quantile(0.05)
+        dataframe[color_by] = np.clip(dataframe[color_by], vmin, vmax)
+    else:
+        # For categorical data, create a discrete color map
+        unique_categories = dataframe[color_by].unique()
+        # str to sth like plotly_utils.colors.qualitative.Plotly
+        color_scale = px.colors.sequential.Rainbow
+        color_map = {category: color_scale[i % len(color_scale)] for i, category in enumerate(unique_categories)}
+
+
+        # Grouping data by chromosome
+    grouped_data = dataframe.groupby('chrom')
+    show_colorbar=0
+    for chrom, group in grouped_data:
+        group = group.sort_values('pos')
+        pos_diff = group['pos'].diff().fillna(0)
+        break_indices = np.where(pos_diff > resolution)[0]
+        segments = np.split(group, break_indices)
+
+        # 初始化存储合并后的坐标点
+        x_all, y_all, z_all, color_values_all = [], [], [], []
+
+        for segment in segments:
+            if len(segment) < 2:
+                continue
+
+            if smooth:
+                if len(segment) <= spline_degree:
+                    continue
+                x, y, z = segment['x'].values, segment['y'].values, segment['z'].values
+                tck, _ = splprep([x, y, z], s=smoothness, k=spline_degree)
+                u_new = np.linspace(0, 1, (len(segment) - 1) * 20 + 1)
+                x_new, y_new, z_new = splev(u_new, tck)
+                
+                x_all.extend(x_new)
+                y_all.extend(y_new)
+                z_all.extend(z_new)
+
+                # Adjust color values for interpolated points
+                if dataframe[color_by].dtype.kind in 'biufc':
+                    color_values = np.repeat(segment[color_by].values[:-1], 20)
+                else:
+                    color_values = [color_map[val] for val in segment[color_by].values[:-1]]
+                    color_values = np.repeat(color_values, 20, axis=0)
+
+                color_values_all.extend(color_values)
+                #print(len(color_values_all)
+
+            else:
+                # 直接使用原始点
+                x_all.extend(segment['x'])
+                y_all.extend(segment['y'])
+                z_all.extend(segment['z'])
+                if dataframe[color_by].dtype.kind in 'biufc':
+                    color_values_all.extend(segment[color_by].values)
+                else:
+                    color_values_all.extend([color_map[val] for val in segment[color_by].values])
+
+        fig.add_trace(go.Scatter3d(x=x_all, y=y_all, z=z_all,
+                                mode='lines',
+                                line=dict(color=color_values_all, colorscale=color_scale, width=width,showscale=True if show_colorbar == 0 else False,
+                                          colorbar=dict(title=color_by, x=1.25)),
+                                name=chrom))
+        show_colorbar += 1
+    fig.update_layout(title=title,
+                    scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'),
+                    width=800, height=600)
+    fig.update_scenes(aspectmode="data")
+    fig.show()
