@@ -5,6 +5,7 @@ import warnings
 from scipy.spatial import cKDTree
 import rmsd
 import pybedtools
+from scipy import stats
 
 
 class Cell3D:
@@ -151,6 +152,19 @@ class Cell3D:
 
         self.tdg["density_"+str(radius)] = np.array(densities)
         return None
+    
+    def add_knn_density(self, k):
+        """
+        use mean distance of k nearest neighbors as density
+        """
+        self.features.append("knn_density_"+str(k))
+        densities = []
+        for point in self.tdg[["x","y","z"]].values:
+            dist,ind = self.kdtree.query(point,k=k+1)
+            density = dist.mean()
+            densities.append(density)
+        self.tdg["knn_density_"+str(k)] = np.array(densities)
+        return None
 
     def add_feature_in_radius(self, feature, radius,type = "mean"):
         """
@@ -261,9 +275,9 @@ class Cell3D:
             pandas.DataFrame
         """
         if query != "":
-            tdg_temp = self.tdg.query(query)
+            tdg_temp = self.tdg.query(query).copy()
         else:
-            tdg_temp = self.tdg
+            tdg_temp = self.tdg.copy()
         if rotate:
             rotated = Cell3D._point_cloud_rotation(tdg_temp[["x","y","z"]].values,
                                         x_angle=(rotate_x_angle is None and np.random.uniform(0, 2*np.pi) or rotate_x_angle),
@@ -282,21 +296,120 @@ class Cell3D:
                 slice_width = slice_width / 2 
                 tdg_temp = tdg_temp.query("x > -@slice_width & x < @slice_width")
 
-        return tdg_temp.copy()
+        return tdg_temp
     
     # analysis
 
     # data visualize
-    def fast_plot3D(ax,x,y,z,c,view=(0,0,0),**kwargs):
-        ax.scatter(x,y,z,c,**kwargs)
-        ax.view_init(*view)
-        ax.set_xlabel('X')
-        ax.set_ylabel('Y')
-        ax.set_zlabel('Z')
-        return ax
+    def plot3d(cell, color_by, resolution=200000, smooth=True, smoothness=2,
+                                            spline_degree=3,cmap="viridis",title='3D Chromatin Structure Visualization',
+                                            vmax=None,vmin=None):
+        """
+        Function to plot a 3D chromatin structure using Plotly. Supports both smooth and straight line
+        representations. The plot is colored based on a specified column and allows interactive manipulation.
 
-    # Visualize the Cell3D object
-    # 1. matplotlib
+        :param dataframe: DataFrame containing the chromatin data.
+        :param color_by: Column name in the dataframe to color the plot by.
+        :param resolution: Resolution for determining continuity. Points closer than this
+                        in the 'pos' column are considered continuous.
+        :param smooth: Boolean to determine if the lines should be smooth or straight.
+        :param smoothness: Number of points to interpolate between two consecutive points.
+        :param spline_degree: Degree of the spline curve.
+        :param cmap: Colormap to use for coloring the plot.
+        :param title: Title for the plot.
+        """
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+        from scipy.interpolate import splprep, splev
+        import plotly.express as px
+
+        # Creating a Plotly figure
+        fig = make_subplots(rows=1, cols=1, specs=[[{'type': 'scatter3d'}]])
+        # if cell is not a pd.DataFrame
+        if not isinstance(cell, pd.DataFrame):
+            try:
+                cell = cell.get_data()
+            except:
+                raise ValueError("cell should be a pandas.DataFrame or a Cell3D object")
+
+        dataframe = cell.copy()
+        # Defining a colormap based on the color_by column
+        # color_scale = 'Viridis' if dataframe[color_by].dtype.kind in 'biufc' else 'Plotly3'
+        if dataframe[color_by].dtype.kind in 'biufc':
+            # Use a continuous colorscale for numeric data
+            color_scale = cmap
+            if vmax is None:
+                vmax = dataframe[color_by].quantile(0.95)
+            if vmin is None:
+                vmin = dataframe[color_by].quantile(0.05)
+            dataframe[color_by] = np.clip(dataframe[color_by], vmin, vmax)
+        else:
+            # For categorical data, create a discrete color map
+            unique_categories = dataframe[color_by].unique()
+            # str to sth like plotly_utils.colors.qualitative.Plotly
+            color_scale = px.colors.sequential.Rainbow
+            color_map = {category: color_scale[i % len(color_scale)] for i, category in enumerate(unique_categories)}
+
+
+            # Grouping data by chromosome
+        grouped_data = dataframe.groupby('chrom')
+        for chrom, group in grouped_data:
+            group = group.sort_values('pos')
+            pos_diff = group['pos'].diff().fillna(0)
+            break_indices = np.where(pos_diff > resolution)[0]
+            segments = np.split(group, break_indices)
+
+            # 初始化存储合并后的坐标点
+            x_all, y_all, z_all, color_values_all = [], [], [], []
+
+            for segment in segments:
+                if len(segment) < 2:
+                    continue
+
+                if smooth:
+                    if len(segment) <= spline_degree:
+                        continue
+                    x, y, z = segment['x'].values, segment['y'].values, segment['z'].values
+                    tck, _ = splprep([x, y, z], s=smoothness, k=spline_degree)
+                    u_new = np.linspace(0, 1, (len(segment) - 1) * 20 + 1)
+                    x_new, y_new, z_new = splev(u_new, tck)
+                    
+                    x_all.extend(x_new)
+                    y_all.extend(y_new)
+                    z_all.extend(z_new)
+
+                    # Adjust color values for interpolated points
+                    if dataframe[color_by].dtype.kind in 'biufc':
+                        color_values = np.repeat(segment[color_by].values[:-1], 20)
+                    else:
+                        color_values = [color_map[val] for val in segment[color_by].values[:-1]]
+                        color_values = np.repeat(color_values, 20, axis=0)
+
+                    color_values_all.extend(color_values)
+                    #print(len(color_values_all)
+
+                else:
+                    # 直接使用原始点
+                    x_all.extend(segment['x'])
+                    y_all.extend(segment['y'])
+                    z_all.extend(segment['z'])
+                    if dataframe[color_by].dtype.kind in 'biufc':
+                        color_values_all.extend(segment[color_by].values)
+                    else:
+                        color_values_all.extend([color_map[val] for val in segment[color_by].values])
+
+            fig.add_trace(go.Scatter3d(x=x_all, y=y_all, z=z_all,
+                                    mode='lines',
+                                    line=dict(color=color_values_all, colorscale=color_scale, width=5),
+                                    name=chrom))
+
+        fig.update_layout(title=title,
+                        scene=dict(xaxis_title='X', yaxis_title='Y', zaxis_title='Z'),
+                        width=800, height=800)
+        fig.update_scenes(aspectmode="data")
+        fig.show()
+
+
 
     # 2. output to cif
     def write_cif(self,factor_b,outputpath = None):
@@ -531,7 +644,6 @@ def feature_radial_distribution(cell, feature,random = False,random_seed = 42):
 
     tdg["feature_radial_distribution"] = tdg[feature] / tdg[feature].mean() * tdg["radial_distance"]
     return tdg
-
 
 def calc_feature_distances(cell, feature_key, threshold, points_num_per_chrom=50, points_num_other_chrom=100, random_seed=0):
     """
