@@ -537,14 +537,14 @@ def feature_radial_distribution(cell, feature,random = False,random_seed = 42):
     center = tdg[["x", "y", "z"]].mean()
     # 2. get distance to center
     tdg["radial_distance"] = np.sqrt((tdg["x"] - center["x"]) ** 2 + (tdg["y"] - center["y"]) ** 2 + (tdg["z"] - center["z"]) ** 2) 
-    tdg["radial_distance"] = tdg["radial_distance"] / tdg["radial_distance"].mean()
+    tdg["radial_distance"] = tdg["radial_distance"] #/ tdg["radial_distance"].mean()
     # 3. get radial distribution
     if random:
         np.random.seed(random_seed)
         tdg[feature] = tdg[feature].values[np.random.permutation(len(tdg[feature]))]
         #print("This is a randomization test.")
 
-    tdg["feature_radial_distribution"] = tdg[feature] / tdg[feature].mean() * tdg["radial_distance"]
+    tdg["feature_radial_distribution"] = tdg[feature] / tdg[feature].sum() * tdg["radial_distance"]
     return tdg
 
 def calc_feature_distances(cell, feature_key, threshold, points_num_per_chrom=50, points_num_other_chrom=100, random_seed=0):
