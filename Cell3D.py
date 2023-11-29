@@ -306,9 +306,9 @@ class Cell3D:
         Plot the 3D structure of the Cell3D object.
         """
         if query is None:
-            plot3d(cell = self.tdg, **kwargs)
+            plot3D(cell = self.tdg, **kwargs)
         else:
-            plot3d(cell = self.tdg.query(query), **kwargs)
+            plot3D(cell = self.tdg.query(query), **kwargs)
 
         
 
@@ -652,7 +652,7 @@ def mat_cor_with_na(mat1,mat2):
 
     return [pearsonr_value,spearmanr_value]
 
-def plot3d(cell, color_by, resolution=200000, smooth=True, smoothness=2,
+def plot3D(cell, color_by, resolution=200000, smooth=True, smoothness=2,
             spline_degree=3,cmap="viridis",title='3D Chromatin Structure Visualization',
             vmax=None,vmin=None,width = 5):
     """
