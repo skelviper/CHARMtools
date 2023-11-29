@@ -521,7 +521,7 @@ def calculate_RMSD(*dataframes):
         
         return rms_rmsd, median_rmsd
 
-def feature_radial_distribution(cell, feature,random = False,random_seed = 42):
+def feature_radial_distribution(cell, feature,random = False,random_seed = 42,if_normalize_avg = False,if_rank = False):
     """
     Calculate the radial distribution of a feature in a Cell3D object.
 
@@ -537,7 +537,12 @@ def feature_radial_distribution(cell, feature,random = False,random_seed = 42):
     center = tdg[["x", "y", "z"]].mean()
     # 2. get distance to center
     tdg["radial_distance"] = np.sqrt((tdg["x"] - center["x"]) ** 2 + (tdg["y"] - center["y"]) ** 2 + (tdg["z"] - center["z"]) ** 2) 
-    tdg["radial_distance"] = tdg["radial_distance"] #/ tdg["radial_distance"].mean()
+    if if_normalize_avg:
+        tdg["radial_distance"] = tdg["radial_distance"] / tdg["radial_distance"].mean()
+
+    if if_rank:
+        tdg["radial_distance"] = tdg["radial_distance"].rank(method='first')
+
     # 3. get radial distribution
     if random:
         np.random.seed(random_seed)
@@ -761,3 +766,31 @@ def plot3D(cell, color_by, resolution=200000, smooth=True, smoothness=2,
                     width=800, height=600)
     fig.update_scenes(aspectmode="data")
     fig.show()
+
+
+def calc_volume(point_cloud,method="convexhull",alpha=0.2):
+    """
+    Calculate the volume of a point cloud.
+
+    Parameters:
+        point_cloud: numpy array of shape (n,3)
+        method: str
+            "alphashape" or "convexhull"
+        alpha: float
+            alpha value for alphashape method
+    Output:
+        volume: float
+    """
+    
+    if method =="alphashape":
+        import alphashape
+        alpha_shape = alphashape.alphashape(point_cloud, alpha=alpha)
+        return alpha_shape.volume
+    
+    if method =="convexhull":
+        from scipy.spatial import ConvexHull
+        hull = ConvexHull(point_cloud)
+        return hull.volume
+
+    else:
+        raise ValueError("method should be alphashape or convexhull")
