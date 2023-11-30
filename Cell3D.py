@@ -6,6 +6,7 @@ from scipy.spatial import cKDTree
 import rmsd
 import pybedtools
 from scipy import stats
+import re
 
 
 class Cell3D:
@@ -166,7 +167,7 @@ class Cell3D:
         self.tdg["knn_density_"+str(k)] = np.array(densities)
         return None
 
-    def add_feature_in_radius(self, feature, radius,type = "mean"):
+    def add_feature_in_radius(self, feature, radius,type = "mean",if_self = False,if_rank = False):
         """
         Smooth given feature by averaging or summing over a sphere of given radius.
 
@@ -183,13 +184,19 @@ class Cell3D:
         Returns:
             None
         """
+        from scipy.stats import rankdata
         indices_list = self.kdtree.query_ball_tree(self.kdtree, r=radius)
+        if not if_self:
+            indices_list = [indices[1:] for indices in indices_list]
         if type =="mean":
             avgs = [self.tdg[feature].iloc[indices].mean() for indices in indices_list]
         elif type =="sum":
             avgs = [self.tdg[feature].iloc[indices].sum() for indices in indices_list]
         else:
             raise ValueError("type should be mean or sum")
+        if if_rank:
+            avgs = rankdata(avgs) / len(avgs)
+
         self.tdg[feature + "_" + type + "_in_radius_" + str(radius)] = avgs
         self.features.append(feature + "_avg_in_radius" + str(radius))
         return None
@@ -197,37 +204,47 @@ class Cell3D:
     def add_chrom_length(self,chrom_length_path):
         chrom_length = pd.read_csv(chrom_length_path,sep="\t",header=None)
         chrom_length.columns = ["chrom","size"]
+        chrom_length["chrom"] = chrom_length["chrom"].str.replace("\(pat\)", "a", regex=True)
+        chrom_length["chrom"] = chrom_length["chrom"].str.replace("\(mat\)", "b", regex=True)
+        chrom_length["chrom"] = chrom_length["chrom"].str.replace("pat", "a", regex=True)
+        chrom_length["chrom"] = chrom_length["chrom"].str.replace("mat", "b", regex=True)
+
         self.features.append("chrom_length")
         self.chrom_length = chrom_length
-
-    def calc_distance_matrix(self,chrom):
+    
+    def calc_distance_matrix(self,genome_coord):
         """
         INPUT:
-            cell: Cell3D object
-            chrom: str, chromosome name
+            genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end. \|
+                          whole chromosome is also acceptable. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a
         OUTPUT:
-            distance matrix of a given chrom
-        TODO:
-            return distance matrix of specific region or band 
+            distance_matrix: symettrical distance matrix of the given region, np.array of shape (n,n)
         """
+        chrom,start,end = _auto_genome_coord(genome_coord)
 
-        if self.chrom_length is None:
-            raise ValueError("chrom_length is not available, please run add_chrom_length first")
-        else:
+        if start is None and self.chrom_length is None:
+            raise ValueError("Running whole chromosome calculation with chrom_length is not available, |\
+                                please run add_chrom_length first")
+        
+        if start is None:        
             matsize = self.chrom_length.query("chrom == @chrom")["size"].values[0] // self.resolution + 1
             reconstruct_df = self.tdg.query("chrom == @chrom").copy()
-            reconstruct_df["pos"] = reconstruct_df["pos"] // self.resolution
-            coordinates = reconstruct_df.iloc[:, 2:5].values
-            diff = coordinates[:, np.newaxis, :] - coordinates[np.newaxis, :, :]
-            dist_matrix_reconstruct = np.linalg.norm(diff, axis=-1)
-            full_dist_matrix = np.full((matsize, matsize), np.nan)
-            for i, pos_i in enumerate(reconstruct_df['pos']):
-                for j, pos_j in enumerate(reconstruct_df['pos']):
-                    full_dist_matrix[pos_i, pos_j] = dist_matrix_reconstruct[i, j]
-        
-            return full_dist_matrix
+        else:
+            matsize = (end - start - 1) // self.resolution + 1
+            reconstruct_df = self.tdg.query("chrom == @chrom & pos >= @start & pos < @end").copy()
+            reconstruct_df["pos"] = reconstruct_df["pos"] - start
 
+        reconstruct_df["pos"] = reconstruct_df["pos"] // self.resolution
+        coordinates = reconstruct_df.iloc[:, 2:5].values
+        diff = coordinates[:, np.newaxis, :] - coordinates[np.newaxis, :, :]
+        dist_matrix_reconstruct = np.linalg.norm(diff, axis=-1)
+        full_dist_matrix = np.full((matsize, matsize), np.nan)
+        for i, pos_i in enumerate(reconstruct_df['pos']):
+            for j, pos_j in enumerate(reconstruct_df['pos']):
+                full_dist_matrix[pos_i, pos_j] = dist_matrix_reconstruct[i, j]
     
+        return full_dist_matrix
+
     # mutate the Cell3D object
     def _point_cloud_rotation(point_cloud, x_angle=None,y_angle=None,z_angle=None):
         """
@@ -794,3 +811,27 @@ def calc_volume(point_cloud,method="convexhull",alpha=0.2):
 
     else:
         raise ValueError("method should be alphashape or convexhull")
+
+def _auto_genome_coord(genome_coord):
+    """
+    Automatically convert genome_coord to chrom,start,end format
+    INPUT:
+
+    OUTPUT:
+    """
+    # determine the genome_coord format
+    if isinstance(genome_coord,str):
+        if ":" in genome_coord:
+            chrom,start,end = re.split(":|-",genome_coord)
+            start,end = int(start),int(end)
+            mat_type = "region"
+        else:
+            chrom,start,end = genome_coord,None,None
+            mat_type = "chrom"
+    elif isinstance(genome_coord,(list,tuple)):
+        chrom,start,end = genome_coord
+        mat_type = "region"
+    else:
+        raise ValueError('Genome_coord should be str or list/tuple. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a"')
+    
+    return chrom,start,end
