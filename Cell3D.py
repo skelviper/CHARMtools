@@ -195,7 +195,7 @@ class Cell3D:
         else:
             raise ValueError("type should be mean or sum")
         if if_rank:
-            avgs = rankdata(avgs) / len(avgs)
+            avgs = rankdata(avgs,nan_policy="omit") / sum(np.isfinite(avgs))
 
         self.tdg[feature + "_" + type + "_in_radius_" + str(radius)] = avgs
         self.features.append(feature + "_avg_in_radius" + str(radius))
@@ -270,7 +270,7 @@ class Cell3D:
         return point_cloud
 
     # o
-    def get_data(self,query = "",slice=False,random_slice=False,slice_width = 3,rotate=False,
+    def get_data(self,genome_coord = "",slice=False,random_slice=False,slice_width = 3,rotate=False,
                  rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
         """
         Get the data of the Cell3D object.
@@ -291,8 +291,12 @@ class Cell3D:
         Returns:
             pandas.DataFrame
         """
-        if query != "":
-            tdg_temp = self.tdg.query(query).copy()
+        if genome_coord != "":
+            chrom,start,end = _auto_genome_coord(genome_coord)
+            if start is None:
+                tdg_temp = self.tdg.query("chrom == @chrom").copy()
+            else:
+                tdg_temp = self.tdg.query("chrom == @chrom & pos >= @start & pos < @end").copy()
         else:
             tdg_temp = self.tdg.copy()
         if rotate:
@@ -441,6 +445,45 @@ class Cell3D:
         distances_selected = kdtree_seleted_points.query(selected_points[['x', 'y', 'z']], k=k)[0].mean(axis=1)
         distances_random = kdtree_random_points.query(random_points[['x', 'y', 'z']], k=k)[0].mean(axis=1)
         return np.array([distances_selected, distances_random])
+
+    def calc_singlecell_compartment(self):
+        """
+        Calculate compartment score for each cell,use CpG to correcct the sign
+        INPUT:
+        OUTPUT:
+            add PC1~3 to self.tdg by default
+        """
+        import cooltools
+        chroms = self.tdg.chrom.unique()
+        tdg_per_chroms = []
+        for i in chroms:
+
+            mat = self.calc_distance_matrix(i)
+            eigval,eigvec = cooltools.api.eigdecomp.cis_eig(mat)
+            resolution = self.resolution
+
+            pca_df = pd.DataFrame(eigvec.T)
+            pca_df.columns = ["PC1", "PC2", "PC3"]
+            pca_df["pos"] = np.arange(0, len(pca_df)) * resolution 
+
+            cpg = self.tdg.query('chrom == @i')[["chrom","pos","CpG"]]
+            temp = pd.merge(cpg,pca_df)
+
+            # correct the sign of PC1~3
+            for i in range(3):
+                i = i + 1
+                if mat_cor_with_na(temp["PC" + str(i)].values,temp["CpG"].values)[1] < 0:
+                    temp["PC" + str(i)] = -temp["PC" + str(i)]
+
+            temp['PC1_sign'] = temp['PC1'].apply(lambda x: 'positive' if x >= 0 else 'negative')
+            temp['CompID'] = (temp['PC1_sign'] != temp['PC1_sign'].shift()).cumsum()
+
+            tdg_per_chroms.append(temp)
+
+        # merge all chroms and add to self.tdg
+        temp = pd.concat(tdg_per_chroms)
+
+        self.tdg = pd.merge(self.tdg,temp[["chrom","pos","PC1","PC2","PC3","PC1_sign","CompID"]])
     
 #Example
 # from scipy.stats import ks_2samp
