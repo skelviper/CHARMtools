@@ -446,7 +446,7 @@ class Cell3D:
         distances_random = kdtree_random_points.query(random_points[['x', 'y', 'z']], k=k)[0].mean(axis=1)
         return np.array([distances_selected, distances_random])
 
-    def calc_singlecell_compartment(self):
+    def calc_singlecell_compartment(self,method="cooltools"):
         """
         Calculate compartment score for each cell,use CpG to correcct the sign
         INPUT:
@@ -454,17 +454,29 @@ class Cell3D:
             add PC1~3 to self.tdg by default
         """
         import cooltools
+        from sklearn.decomposition import PCA
+        from . import compartment
+
         chroms = self.tdg.chrom.unique()
         tdg_per_chroms = []
         for i in chroms:
 
             mat = self.calc_distance_matrix(i)
-            eigval,eigvec = cooltools.api.eigdecomp.cis_eig(mat)
-            resolution = self.resolution
+            mat = 1/(mat + 1)
+            if method == "cooltools":
+                eigval,eigvec = cooltools.api.eigdecomp.cis_eig(mat)
+            else:
+                mat = np.nan_to_num(mat)
+                mat_corr = np.corrcoef(compartment.getOEMatrix(mat))
+                mat_corr= np.nan_to_num(mat_corr)
+                pca=PCA(n_components=3)
+                pca.fit(mat_corr)
+                eigvec = pca.components_
+                eigval,eigvec = cooltools.api.eigdecomp.cis_eig(mat_corr)
 
             pca_df = pd.DataFrame(eigvec.T)
             pca_df.columns = ["PC1", "PC2", "PC3"]
-            pca_df["pos"] = np.arange(0, len(pca_df)) * resolution 
+            pca_df["pos"] = np.arange(0, len(pca_df)) * self.resolution 
 
             cpg = self.tdg.query('chrom == @i')[["chrom","pos","CpG"]]
             temp = pd.merge(cpg,pca_df)
@@ -480,11 +492,19 @@ class Cell3D:
 
             tdg_per_chroms.append(temp)
 
-        # merge all chroms and add to self.tdg
+            # merge all chroms and add to self.tdg
         temp = pd.concat(tdg_per_chroms)
 
         self.tdg = pd.merge(self.tdg,temp[["chrom","pos","PC1","PC2","PC3","PC1_sign","CompID"]])
-    
+            
+
+class MultiCell3D:
+    def __init__(self):
+        pass
+        #self.data = anndata.AnnData()
+        #self.cell3d_objects = {}
+        #self.cellnames = []
+
 #Example
 # from scipy.stats import ks_2samp
 # distances_cell = cell.calc_feature_distances("Random", 0.01, random_seed=1,k=20)
