@@ -16,6 +16,9 @@ def get_legs(pairs:pd.DataFrame)->pd.DataFrame:
 def point_near_count(ref_points:np.array, scatter_points:np.array, radius:float)->np.array:
     # count number of points within radius
     # return array same length with ref_points
+    if np.isscalar(scatter_points):
+        scatter_points = np.array([scatter_points])
+
     left = scatter_points - radius
     right = scatter_points + radius
     scatter_points_expand = \
@@ -28,6 +31,7 @@ def point_near_count(ref_points:np.array, scatter_points:np.array, radius:float)
             res.astype(int).sum()
         )
     return np.array(hit_num)
+
 def particle_evidence(chrom_structure:pd.DataFrame, legs:pd.DataFrame, chrom:str, max_clean_distance:float)->pd.DataFrame:
     # count number of contacts support structure particle
     # must provide particles' chromosome name
