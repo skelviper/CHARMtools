@@ -8,6 +8,10 @@ from io import StringIO
 import ref
 from functools import partial
 
+import re
+import h5py
+import scipy
+
 #upsteram hic
 def divide_name(filename):
     #home-made os.path.splitext, for it can't handle "name.a.b.c" properly
@@ -295,3 +299,35 @@ def pairs_describe(pairs):
     inter_pairs_ratio = pairs[pairs['chr1'] != pairs['chr2']].shape[0] / contacts_number
     non_contact_ratio = pairs[(pairs['chr1'] == pairs['chr2']) & (pairs["pos2"] - pairs["pos1"] < 1000)].shape[0] / contacts_number
     return [pairs.attrs["name"],contacts_number, inter_pairs_ratio, non_contact_ratio]
+
+
+# Functions for simpleDiff-python
+def load_sparse_form_h5(filename):
+    with h5py.File(filename, 'r') as f:
+        data = f['data'][:]
+        indices = f['indices'][:]
+        indptr = f['indptr'][:]
+        shape = f['shape'][:]
+        csr = scipy.sparse.csr_matrix((data, indices, indptr), shape=shape)
+        return csr
+
+def read_subregion_from_h5(filename, row_start, row_end, col_start, col_end):
+    csr = load_sparse_form_h5(filename)
+    subregion = csr[row_start:row_end, col_start:col_end].todense()
+    subregion = subregion + subregion.T - np.diag(np.diag(subregion))
+    return subregion
+
+def read_mat_h5(filepath,genome_coord,resolution = 10000):
+    split = re.split("[:-]",genome_coord.replace(",",""))
+    if len(split) == 3:
+        chrom,start,end = split
+        start = int(start)
+        end = int(end)
+        mat = read_subregion_from_h5(filepath,start//resolution,end//resolution,start//resolution,end//resolution)
+        mat = np.log2(mat+1)
+    else:
+        chrom = split[0] 
+        csr = load_sparse_form_h5(filepath)
+        mat = csr.todense()
+        mat = np.log2(mat+1)
+    return mat

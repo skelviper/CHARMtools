@@ -48,7 +48,7 @@ def pairs_to_bedgraph(pairspath,chrom_sizes,binsize=500, num_cores=1,chunksize =
 
 def multiple_pairs_to_bedgraph(pairs_paths,chrom_sizes,binsize=500, num_cores=10,normalize_method = "cpm"):
     combined_bedgraph = pd.DataFrame()
-    pairs_paths = glob.glob(pairs_paths)
+    #pairs_paths = glob.glob(pairs_paths)
     results = Parallel(n_jobs=num_cores)(delayed(pairs_to_bedgraph)(i,chrom_sizes,binsize=binsize,chunksize = None,num_cores=1,normalize_method=None) for i in pairs_paths)
     #combined_bedgraph = pd.concat(results).groupby(["chr","start","end"]).agg({"count":"sum"}).reset_index()
     summed_count = np.sum([table["count"].values for table in results],axis=0)

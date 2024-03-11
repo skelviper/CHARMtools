@@ -1,61 +1,122 @@
-# simpleDiff 
-# Finding difference in two group of cooler
+# python version of simple diff
+# zliu 2024-03-10
+# use schiclsuter for imputation 
+import sys
 
-import re
-from os import path
 import numpy as np
 import pandas as pd
-from scipy import stats
-from scipy.sparse import diags
+import scipy
+import tqdm
 
+import seaborn as sns
+import matplotlib.pyplot as plt
+from numba import jit
+
+import concurrent.futures
 import gc
+import math
+from . import CHARMio
 
-def getMatrixFromMCOOLs(filepath:str, genome_coord1:str,genome_coord2=None, resolution=40000, balance=False)->np.ndarray:
-    """
-    intput: mcool filepath ,
-            genome_coord(e.g. 'chr1:35,900,000-40,900,000'), 
-            resolution(should be included in mcoolfile)
-    output: numpy 2d array
-    """
-    import cooler
-    cool = filepath+"::/resolutions/"+str(resolution)
 
-    c = cooler.Cooler(cool)
-    if(genome_coord2 == None):
-        genome_coord2 = genome_coord1
-    matrix = c.matrix(balance=balance).fetch(genome_coord1,genome_coord2).astype("double")
-
-    return matrix
-
-def getMatrixFromCooler(filepath:str, genome_coord1:str,genome_coord2=None, resolution=40000, balance=False)->np.ndarray:
+# for reference: numba version takes 2.5s, numpy version takes 7.9s
+@jit(nopython=True)
+def calculate_band_z_scores(matrix):
     """
-    intput: cooler or mcool filepath, file type determined by last extension name.
-            genome_coord(e.g. 'chr1:35,900,000-40,900,000'), 
-            resolution(should be included in mcoolfile)
-    output: numpy 2d array
-    """
-    import cooler
+    Band-ly calculate z-scores of a matrix, used as input for SimpleDiff,
+    ignoring NaN values in the calculation.
     
-    if filepath.split(sep='.')[-1] == "mcool":
-        return getMatrixFromMCOOLs(filepath, genome_coord1,genome_coord2, resolution, balance)
+    input: n*n numpy 2d array
+    output: band-zscore-normalized n*n numpy 2d array
+    """
+    n = matrix.shape[0]
+    z_score_matrix = np.zeros((n, n), dtype=float)
     
-    c = cooler.Cooler(filepath)
-    if(genome_coord2 == None):
-        genome_coord2 = genome_coord1
-    matrix = c.matrix(balance=balance).fetch(genome_coord1,genome_coord2).astype("double")
+    for k in range(-n + 1, n):
+        band = []
+        valid_count = 0
+        sum_of_band = 0.0
+        for i in range(max(0, -k), min(n, n - k)):
+            j = i + k
+            if not math.isnan(matrix[i, j]):
+                band.append(matrix[i, j])
+                sum_of_band += matrix[i, j]
+                valid_count += 1
 
-    return matrix
+        band_length = len(band)
+        if valid_count > 1:
+            mean = sum_of_band / valid_count
+            
+            sum_of_squares = 0.0
+            for x in band:
+                sum_of_squares += (x - mean) ** 2
+            
+            std = math.sqrt(sum_of_squares / valid_count)
+            
+            if std != 0:
+                for i in range(band_length):
+                    row_idx = max(0, -k) + i
+                    col_idx = row_idx + k
+                    z_score_matrix[row_idx, col_idx] = (band[i] - mean) / std
+                
+    return z_score_matrix
+
+def calculate_band_z_scores_numpy(matrix):
+    """
+    Band-ly calculate z-scores of a matrix, used as input for SimpleDiff,
+    ignoring NaN values in the calculation.
+    
+    input: n*n numpy 2d array
+    output: band-zscore-normalized n*n numpy 2d array, NaN preserved
+    """
+    n = matrix.shape[0]
+    z_score_matrix = np.zeros((n,n), dtype=float)
+    nan_mask = np.isnan(matrix)  # Create a mask of where NaN values are located
+
+    for k in range(-n+1, n):
+        band = np.diagonal(matrix, offset=k).copy()
+        if len(band) > 1:
+            mean = np.nanmean(band)  
+            std = np.nanstd(band)  
+            if std == 0:
+                np.fill_diagonal(z_score_matrix[max(-k,0):, max(k,0):], 0)
+            else:
+                z_scores = (band - mean) / std
+                # Ignore NaN in original data by setting z-scores to NaN where original data was NaN
+                z_scores[np.isnan(band)] = np.nan
+                np.fill_diagonal(z_score_matrix[max(-k,0):, max(k,0):], z_scores)
+
+    # Preserve original NaN positions by setting NaNs in z_score_matrix where they were in the input matrix
+    z_score_matrix[nan_mask] = np.nan
+
+    return z_score_matrix
+
+def center_band_numpy(matrix):
+    """
+    Band-ly center band, used as input for SimpleDiff,
+    ignoring NaN values in the calculation.
+    
+    input: n*n numpy 2d array
+    output: centered n*n numpy 2d array, NaN preserved
+    """
+    n = matrix.shape[0]
+    centered_matrix = np.zeros((n,n), dtype=float)
+    nan_mask = np.isnan(matrix) 
+
+    for k in range(-n+1, n):
+        band = np.diagonal(matrix, offset=k).copy()
+        if len(band) > 1:
+            mean = np.nanmean(band)  
+            centered = band - mean
+
+            centered[np.isnan(band)] = np.nan
+            np.fill_diagonal(centered_matrix[max(-k,0):, max(k,0):], centered)
+
+    centered_matrix[nan_mask] = np.nan
+
+    return centered_matrix
 
 def getBandVec(mat:np.array,bins:int):
     return np.concatenate([np.diagonal(mat,offset = i) for i in range(bins)],axis=0)
-
-def getBandMat(coolerPaths:list,genome_coord:str,bins=500):
-    veclist = []
-    for cellPath in coolerPaths:
-        if path.exists(cellPath):
-            mat = getMatrixFromCooler(cellPath,genome_coord1=genome_coord)
-            veclist.append(getBandVec(mat,bins=bins))
-    return np.array(veclist),mat.shape[0]
 
 def multiple_testing_correction(pvalues, correction_type="FDR"):
     """
@@ -96,77 +157,109 @@ def multiple_testing_correction(pvalues, correction_type="FDR"):
             qvalues[index] = new_values[i]
     return qvalues
 
-def simpleDiff(coolerPath1:list,coolerPath2:list,genome_coord:str,bins=500,resolution=20000,fdr_threshold=0.05):
-    """
-    simpleDiff main funciton, accept cooler path list, return bedpe format dataframe with statistics and FDR.
-    """
+def generate_chrom_vec(path,chrom,blacklist_df,resolution=10000,bins=200):
+    mat = CHARMio.read_mat_h5(path,genome_coord=chrom)
+    mat = np.log2(mat + 1)
+    chrom_blacklist_df = blacklist_df.query('chrom == @chrom')
+    indices=[]
+    for index,row in chrom_blacklist_df.iterrows():
+        start_row = math.floor(row['start'] / resolution)
+        end_row = math.ceil(row['end'] / resolution)
+        indices += [i for i in range(start_row,end_row)]
+    indices = list(set(indices))
+    
+    mat[indices,:]=np.nan
+    mat[:,indices]=np.nan
+    np.fill_diagonal(mat,np.nan)
 
-    genome_coord_list = re.split("[-:]",genome_coord)
-    mat1, reconstructMatrixShapeLength = getBandMat(coolerPath1[:],genome_coord = genome_coord,bins=bins)
-    mat2, _ = getBandMat(coolerPath2[:],genome_coord = genome_coord,bins=bins)
-    res = stats.ttest_ind(mat1,mat2)
+    z_score_band_mat = center_band_numpy(mat)
+    z_score_band_vec = getBandVec(z_score_band_mat, bins)
+    return z_score_band_vec
 
-    a= np.array(res)[1]
-    statistics = np.array(res)[0]
-    a[np.isnan(a)] = 1
+def generate_chrom_mat(dir,cellnames,chrom,blacklist_df,cores=20,resolution=10000):
+    results = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=cores) as executor:
+        futures = [executor.submit(generate_chrom_vec,dir+"/"+cellname+".impute."+chrom+".h5",chrom,blacklist_df,resolution) for cellname in cellnames]
+        progress_bar = tqdm.tqdm(concurrent.futures.as_completed(futures),total=len(futures),desc="generate mat for compare")
 
-    vec = multiple_testing_correction(a)
+        for future in progress_bar:
+            results.append(future.result())
+    results = np.vstack(results)
+    return results
+
+def test_diff(test_matrix_celltype1,test_matrix_celltype2,method="t",n_cores=10,chunks=50):
+    n_features = test_matrix_celltype1.shape[1]
+    chunk_size = (n_features + chunks - 1) // chunks  
+    chunks = [list(range(i, min(i+chunk_size, n_features))) for i in range(0, n_features, chunk_size)]
+
+    results = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=n_cores) as executor:
+        if method == "t":
+            futures = [executor.submit(scipy.stats.ttest_ind,test_matrix_celltype1[:, chunk], test_matrix_celltype2[:, chunk], alternative='two-sided') for chunk in chunks]
+        else:
+            futures = [executor.submit(scipy.stats.mannwhitneyu,test_matrix_celltype1[:, chunk], test_matrix_celltype2[:, chunk], alternative='two-sided') for chunk in chunks]
+        progress_bar = tqdm.tqdm(range(len(futures)), total=len(futures), desc="Processing chunks")
+        for i, future in enumerate(futures):
+            try:
+                results.append(future.result())
+                progress_bar.update(1)
+            except Exception as e:
+                print(f"An error occurred: {e}")
+                results.append(None)
+
+    pvs = np.array([i[1] for i in results]).reshape(-1)
+    stats = np.array([i[0] for i in results]).reshape(-1)
+
+    return pvs,stats
+
+
+def post_process(pvs,stats,test_matrix_celltype1,test_matrix_celltype2,reconstructMatrixShapeLength,bins=200):
+    mat1_vec = np.nanmean(test_matrix_celltype1,axis=0)
+    mat2_vec = np.nanmean(test_matrix_celltype2,axis=0)
+
     diagonals = []
     diagonals_stats = []
+    diagonals_mat1 = []
+    diagonals_mat2 = []
+
     start=0
+
     for i in range(bins):
-        diagonals.append(vec[start:start+reconstructMatrixShapeLength-i])
-        diagonals_stats.append(statistics[start:start+reconstructMatrixShapeLength-i])
+        diagonals.append(pvs[start:start+reconstructMatrixShapeLength-i])
+        diagonals_stats.append(stats[start:start+reconstructMatrixShapeLength-i])
+        diagonals_mat1.append(mat1_vec[start:start+reconstructMatrixShapeLength-i])
+        diagonals_mat2.append(mat2_vec[start:start+reconstructMatrixShapeLength-i])
+
         start += reconstructMatrixShapeLength-i
-    reMat = diags(np.array(diagonals),[i for i in range(bins)]).toarray()
-    reMat_stats = diags(np.array(diagonals_stats),[i for i in range(bins)]).toarray()
+        
+    reMat_pvs = scipy.sparse.diags(np.array(diagonals, dtype=object),[i for i in range(bins)]).toarray()
+    reMat_stats = scipy.sparse.diags(np.array(diagonals_stats, dtype=object),[i for i in range(bins)]).toarray()
+    reMat_mat1 = scipy.sparse.diags(np.array(diagonals_mat1, dtype=object),[i for i in range(bins)]).toarray()
+    reMat_mat2 = scipy.sparse.diags(np.array(diagonals_mat2, dtype=object),[i for i in range(bins)]).toarray()
+    reMat_diff = reMat_mat1 - reMat_mat2
 
-    del mat1
-    del mat2
+    return reMat_pvs,reMat_stats,reMat_mat1,reMat_mat2,reMat_diff
 
-    #format dataframe
-    where = np.where((reMat < fdr_threshold) & (reMat > 0))
+def generate_res_df(reMat_pvs,reMat_stats,reMat_diff,chrom,resolution=10000):
+
+    where = np.where(reMat_pvs > 0)
     where_list = (np.array(where)*resolution).tolist()
     where_list.append(reMat_stats[where].tolist())
-    where_list.append(reMat[where].tolist())
+    where_list.append(reMat_pvs[where].tolist())
+    where_list.append(reMat_diff[where].tolist())
+
     df = pd.DataFrame(where_list).T
-    df.columns = ["start1","start2","stats","FDR"]
+    df.columns = ["start1","start2","stats","pv","diff"]
     df["end1"] = df["start1"] + resolution
     df["end2"] = df["start2"] + resolution
-    df["chrom1"] = genome_coord_list[0]
-    df["chrom2"] = genome_coord_list[0]
-    df = df[["chrom1","start1","end1","chrom2","start2","end2","stats","FDR"]]
-    
-    del reMat
-    gc.collect()
-    
+
+    df["start1"] = df["start1"].astype(int)
+    df["end1"] = df["end1"].astype(int)
+    df["start2"] = df["start2"].astype(int)
+    df["end2"] = df["end2"].astype(int)
+
+    df["chrom1"] = chrom
+    df["chrom2"] = chrom
+    df = df[["chrom1","start1","end1","chrom2","start2","end2","stats","pv","diff"]]
+
     return df
-
-if __name__ == "__main__":
-    import argparse
-    import ray
-    #import glob
-    import time
-
-    parser = argparse.ArgumentParser(description='Get simple diff between two cooler files')
-    parser.add_argument('-i1', '--input1', nargs='+', help='cooler file path list for celltype1', required=True)
-    parser.add_argument('-i2', '--input2', nargs='+', help='cooler file path list for celltype2', required=True)
-    parser.add_argument('-b', '--bins', type=int, help='bins for matrix, e.g. for 20k resolution, 500bins needed for 10mb range', required=True)
-    parser.add_argument('-t','--threads', help='number of threads', required=False, default=20)
-    parser.add_argument('-r','--resolution', help='resolution of matrix, e.g. for 20k resolution, 20000', required=False, default=20000)
-    parser.add_argument('-o', '--output', help='output file path', required=True)
-
-    chroms = ["chr"+str(i) for i in range(1,19)]
-    #chroms = ["chr19","chr18","chr17"]
-
-    ray.init(num_cpus=int(parser.parse_args().threads))
-    simpleDiff_remote = ray.remote(simpleDiff)
-
-    start = time.time()
-    futures = [simpleDiff_remote.remote(parser.parse_args().input1,parser.parse_args().input2,genome_coord=chrom,
-    bins = parser.parse_args().bins,) for chrom in chroms]
-    res = pd.concat(ray.get(futures), axis=0)
-    res.to_csv(parser.parse_args().output,sep="\t",index=False)
-    end = time.time()
-    ray.shutdown()
-    print("duration = ",end-start," seconds")
