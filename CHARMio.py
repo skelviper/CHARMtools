@@ -1,4 +1,3 @@
-#global dependence
 import numpy as np
 import pandas as pd
 import gzip
@@ -12,7 +11,7 @@ import re
 import h5py
 import scipy
 
-#upsteram hic
+# Functions for CHARM/HiRES pipeline 
 def divide_name(filename):
     #home-made os.path.splitext, for it can't handle "name.a.b.c" properly
     basename = os.path.basename(filename)
@@ -21,57 +20,6 @@ def divide_name(filename):
         return parts[0], ""
     else:
         return parts[0], "."+".".join(parts[1:])
-
-def parse_pair_archieve(filename:str)->"Cell":
-    '''
-    read from 4DN's standard .pairs format
-    compatible with all hickit originated pairs-like format 
-    '''
-    # read comments
-    with gzip.open(filename,"rt") as f:
-        comments = []
-        chromosomes = []
-        lengths = []
-        for line in f.readlines():
-            if line[0] != "#":
-                break
-            if line.startswith("#chromosome") or line.startswith("#chromsize"):
-                chrom, length = line.split(":")[1].strip().split()
-                chromosomes.append(chrom)
-                lengths.append(int(length))
-            if line.startswith("#columns:"):
-                columns = line.split(":")[1].strip().split()
-            ## comment lines are stored in dataframe.attrs["comment"]
-            comments.append(line)
-    dtype_array = {"readID":"category",
-            "chr1":pd.CategoricalDtype(categories=chromosomes),
-            "pos1":"int",
-            "chr2":pd.CategoricalDtype(categories=chromosomes),
-            "pos2":"int",
-            "strand1":pd.CategoricalDtype(categories=["+","-"]),
-            "strand2":pd.CategoricalDtype(categories=["+","-"]),
-            "phase0":pd.CategoricalDtype(categories=["1","0","."]),
-            "phase1":pd.CategoricalDtype(categories=["1","0","."]),
-            "phase_prob00":"float",
-            "phase_prob01":"float",
-            "phase_prob10":"float",
-            "phase_prob11":"float"}
-    dtypes = {key:value for key, value in dtype_array.items() if key in columns}
-    #read table format data
-    pairs = pd.read_table(
-        filename, 
-        header=None, 
-        comment="#",
-        dtype=dtypes,
-        names=columns
-        )
-    pairs.attrs["comments"] = comments
-    pairs.attrs["name"], _ = divide_name(filename) # infer real sample name
-    pairs.attrs["chromosomes"] = chromosomes
-    pairs.attrs["lengths"] = lengths
-    #assign column names
-    #sys.stderr.write("pairs_parser: %s parsed \n" % filename)
-    return pairs
 
 def parse_pairs(filename:str)->"Cell":
     '''
@@ -96,7 +44,118 @@ def parse_pairs(filename:str)->"Cell":
     #sys.stderr.write("pairs_parser: %s parsed \n" % filename)
     return pairs
 
-#Hi-C
+def check_index_binsize(s: pd.DataFrame) -> int:
+    """
+    Check if the index of s, considering its first level grouping, has sorted and consistent binsizes.
+    
+    The function assumes that the second level of the MultiIndex is numerical (e.g., genomic coordinates or timestamps).
+    It calculates the binsize for each group defined by the first level and returns a series with the binsizes.
+    If any inconsistency in binsize within a group is found, raises ValueError.
+    Input:
+        s: A pandas DataFrame with a MultiIndex where the first level represents chromosome names and the second level
+              represents positions or other values that should have a consistent difference (binsize).
+    Output:
+        binsize
+    """
+
+    # Ensure the index is sorted
+    s = s.sort_index()
+    # Calculate binsizes per group based on the first level
+    # last 2 element is not used, because the last one is NaN and in some situations the second last one is partial binsize
+    # negative period is used to ensure first element is not NaN
+    result_dfs = []
+    for name, group in s.groupby(level=0):
+        new_df = pd.Series(
+            -group.index.get_level_values(1).diff(-1),
+            index = group.index
+            ).rename("binsizes").iloc[:-2]
+        result_dfs.append(new_df)
+    binsizes = pd.concat(result_dfs, axis=0).dropna().astype(int)
+    if binsizes.empty:
+        print("Warning: No binsize found.")
+        # just use the first binsize
+        binsize = -s.index.get_level_values(1).diff()[0]
+    elif len(binsizes.unique()) > 1:
+        print("Warning: Inconsistent binsizes found in the input file %s" % binsizes.unique())
+        binsize = binsizes.dropna().unique()[0]
+    else:
+        binsize = binsizes.dropna().unique()[0]
+    return binsize
+
+def write_pairs(pairs:pd.DataFrame, out_name:str):
+    '''
+    write dataframe to tab delimited zipped file
+    reserve comment lines, no dataframe index
+    headers store in last comment line
+    need to sort with upper triangle label
+    '''
+    #sys.stderr.write("write to %s\n" % out_name)
+    with gzip.open(out_name,"wt") as f:
+        pairs.attrs["comments"].pop()
+        pairs.attrs["comments"].append("#columns:" + "\t".join(pairs.columns) + "\n")
+        f.write("".join(pairs.attrs["comments"]))
+        pairs.to_csv(f, sep="\t", header=False, index=False, mode="a")
+
+def parse_3dg(file:str, sorting=False, s2m=False)->pd.DataFrame:
+    """
+    Read in hickit 3dg file(or the .xyz file)
+    Norm chr name alias
+    Read into dataframe.attrs if has comments, treat last comment line as backbone_unit
+    Input:
+        filename: file path
+        sorting: whether to sort chromosome and positions
+        s2m: whether to use mid point of bin as position
+    Output:
+        3 col dataframe with 2-level multindex: (chrom, pos) x, y, z
+    """
+
+    ## read comments
+    comments = read_comments(file, next_line=False)
+    ## read real positions
+    s = pd.read_table(file, 
+                      comment="#",header=None,
+                     index_col=[0,1],
+                     converters={0:norm_chr})
+    s.columns = "x y z".split()
+    s.index.names = ["chr","pos"]
+    ## assume last comment is backbone_unit
+    if len(comments) > 0:
+        s.attrs["comments"] = comments
+        backbone_unit = float(comments[-1].split(":")[1].strip())
+        s.attrs["backbone_unit"] = backbone_unit    
+    if sorting:
+        s.sort_index(inplace=True)
+    if s2m:
+        binsize = check_index_binsize(s)
+        s.index = pd.MultiIndex.from_arrays(
+            [s.index.get_level_values(0), s.index.get_level_values(1) + binsize//2],
+            names=["chr","pos"]
+        )
+    return s
+
+def m2s_index(_3dg:pd.DataFrame)->pd.DataFrame:
+    '''
+    Convert from middle-as-pos to start-as-pos
+    Input:
+        a structure dataframe with 2-level multiindex
+    Output:
+        a structure dataframe with 2-level multiindex
+    '''
+    binsize = check_index_binsize(_3dg)
+    _3dg.index = pd.MultiIndex.from_arrays(
+        [_3dg.index.get_level_values(0), _3dg.index.get_level_values(1) - binsize//2],
+        names=["chr","pos"]
+    )
+    if _3dg.index.get_level_values(1).min() < 0:
+        raise ValueError("Negative position found in the dataframe, perhaps the dataframe has been converted to start-as-pos already.")
+    return _3dg
+def write_3dg(_3dg:pd.DataFrame, outname:str, m2s=False):
+    if m2s:
+        _3dg = m2s_index(_3dg)
+    _3dg.to_csv(outname, sep="\t",header=None)
+    return 0
+
+#Functions for analysis
 def getMatrixFromMCOOLs(filepath:str, genome_coord1:str,genome_coord2=None, resolution=40000, balance=False)->np.ndarray:
     """
     intput: mcool filepath ,
@@ -142,20 +201,6 @@ def cooltoolsGetObsExp(filepath:str, genome_coord1:str,genome_coord2=None, resol
     pass
     # if filepath.split(sep='.')[-1] == "mcool":
 
-def write_pairs(pairs:pd.DataFrame, out_name:str):
-    '''
-    write dataframe to tab delimited zipped file
-    reserve comment lines, no dataframe index
-    headers store in last comment line
-    need to sort with upper triangle label
-    '''
-    #sys.stderr.write("write to %s\n" % out_name)
-    with gzip.open(out_name,"wt") as f:
-        pairs.attrs["comments"].pop()
-        pairs.attrs["comments"].append("#columns:" + "\t".join(pairs.columns) + "\n")
-        f.write("".join(pairs.attrs["comments"]))
-        pairs.to_csv(f, sep="\t", header=False, index=False, mode="a")
-
 def parse_gtf(filename:str) -> pd.DataFrame:
     # read gtf, get exons
     gencode = pd.read_table(filename, comment="#", header=None)
@@ -176,43 +221,6 @@ def fill_func_ref(template_func:callable, ref_file:str, index_col:str)->callable
     ref_dict = ref_df.iloc[:,0].to_dict()
     working_func = partial(template_func, ref_dict=ref_dict)
     return working_func
-
-def parse_3dg(filename:str)->pd.DataFrame:
-    # read in hickit 3dg file(or the .xyz file)
-    # norm chr name alias
-
-    ## get alias file in package
-    ## reference is a "data module" with its own __init__.py
-    dat = get_data(ref.__name__, "chrom_alias.csv")
-    dat_f = StringIO(dat.decode())
-    norm_chr = fill_func_ref(
-                    converter_template,
-                    dat_f,
-                    "alias")
-    ## read comments
-    with open(filename) as f:
-        comments = []
-        for line in f.readlines():
-            if line[0] != "#":
-                break
-            comments.append(line)
-    ## read real positions
-    s = pd.read_table(filename, 
-                      comment="#",header=None,
-                     index_col=[0,1],
-                     converters={0:norm_chr})
-    s.columns = "x y z".split()
-    s.index.names = ["chr","pos"]
-    ## assume last comment is backbone_unit
-    if len(comments) > 0:
-        s.attrs["comments"] = comments
-        backbone_unit = float(comments[-1].split(":")[1].strip())
-        s.attrs["backbone_unit"] = backbone_unit    
-    return s
-
-def write_3dg(pairs:pd.DataFrame, outname:str):
-    pairs.to_csv(outname, sep="\t",header=None)
-    return 0
 
 def parquet2pairs(parquet_path,pairs_path):
     cell = pd.read_parquet(parquet_path)
