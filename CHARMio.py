@@ -44,43 +44,35 @@ def parse_pairs(filename:str)->"Cell":
     #sys.stderr.write("pairs_parser: %s parsed \n" % filename)
     return pairs
 
-def check_index_binsize(s: pd.DataFrame) -> int:
+def check_index_binsize(df: pd.DataFrame) -> int:
     """
-    Check if the index of s, considering its first level grouping, has sorted and consistent binsizes.
-    
-    The function assumes that the second level of the MultiIndex is numerical (e.g., genomic coordinates or timestamps).
-    It calculates the binsize for each group defined by the first level and returns a series with the binsizes.
-    If any inconsistency in binsize within a group is found, raises ValueError.
-    Input:
-        s: A pandas DataFrame with a MultiIndex where the first level represents chromosome names and the second level
-              represents positions or other values that should have a consistent difference (binsize).
-    Output:
-        binsize
+    Calculate the resolution of a DataFrame with a MultiIndex (chr, pos).
+    Resolution is defined as the smallest non-zero difference between the 'pos' values for each 'chr'.
+    Args:
+        df: A pandas DataFrame with a MultiIndex where the first level is 'chr' and the second level is 'pos'.
+    Returns:
+        The resolution as an integer.
     """
+    # Initialize a large number to find the minimum resolution
+    min_resolution = float('inf')
 
-    # Ensure the index is sorted
-    s = s.sort_index()
-    # Calculate binsizes per group based on the first level
-    # last 2 element is not used, because the last one is NaN and in some situations the second last one is partial binsize
-    # negative period is used to ensure first element is not NaN
-    result_dfs = []
-    for name, group in s.groupby(level=0):
-        new_df = pd.Series(
-            -group.index.get_level_values(1).diff(-1),
-            index = group.index
-            ).rename("binsizes").iloc[:-2]
-        result_dfs.append(new_df)
-    binsizes = pd.concat(result_dfs, axis=0).dropna().astype(int)
-    if binsizes.empty:
-        print("Warning: No binsize found.")
-        # just use the first binsize
-        binsize = -s.index.get_level_values(1).diff()[0]
-    elif len(binsizes.unique()) > 1:
-        print("Warning: Inconsistent binsizes found in the input file %s" % binsizes.unique())
-        binsize = binsizes.dropna().unique()[0]
-    else:
-        binsize = binsizes.dropna().unique()[0]
-    return binsize
+    # Group by the chromosome level of the index
+    for chromosome, group in df.groupby(level=0):
+        # Calculate differences between adjacent positions
+        pos_diffs = group.index.get_level_values(1).to_series().diff().dropna()
+
+        # Exclude zero differences and find the minimum
+        non_zero_diffs = pos_diffs[pos_diffs != 0]
+        if not non_zero_diffs.empty:
+            chrom_min_res = non_zero_diffs.min()
+            # Update overall minimum resolution if this chromosome's min is smaller
+            min_resolution = min(min_resolution, chrom_min_res)
+
+    # If min_resolution is still infinity, there were no non-zero resolutions found
+    if min_resolution == float('inf'):
+        raise ValueError("No non-zero position differences found in the DataFrame.")
+
+    return int(min_resolution)
 
 def write_pairs(pairs:pd.DataFrame, out_name:str):
     '''
@@ -96,23 +88,27 @@ def write_pairs(pairs:pd.DataFrame, out_name:str):
         f.write("".join(pairs.attrs["comments"]))
         pairs.to_csv(f, sep="\t", header=False, index=False, mode="a")
 
-def parse_3dg(file:str, sorting=False, s2m=False)->pd.DataFrame:
-    """
-    Read in hickit 3dg file(or the .xyz file)
-    Norm chr name alias
-    Read into dataframe.attrs if has comments, treat last comment line as backbone_unit
-    Input:
-        filename: file path
-        sorting: whether to sort chromosome and positions
-        s2m: whether to use mid point of bin as position
-    Output:
-        3 col dataframe with 2-level multindex: (chrom, pos) x, y, z
-    """
+def parse_3dg(filename:str,s2m=False,sorting=False)->pd.DataFrame:
+    # read in hickit 3dg file(or the .xyz file)
+    # norm chr name alias
 
+    ## get alias file in package
+    ## reference is a "data module" with its own __init__.py
+    dat = get_data(ref.__name__, "chrom_alias.csv")
+    dat_f = StringIO(dat.decode())
+    norm_chr = fill_func_ref(
+                    converter_template,
+                    dat_f,
+                    "alias")
     ## read comments
-    comments = read_comments(file, next_line=False)
+    with open(filename) as f:
+        comments = []
+        for line in f.readlines():
+            if line[0] != "#":
+                break
+            comments.append(line)
     ## read real positions
-    s = pd.read_table(file, 
+    s = pd.read_table(filename, 
                       comment="#",header=None,
                      index_col=[0,1],
                      converters={0:norm_chr})
