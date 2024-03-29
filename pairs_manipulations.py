@@ -34,7 +34,7 @@ def pairs_to_bedgraph(pairspath,chrom_sizes,binsize=500, num_cores=1,chunksize =
     if chunksize is None:
         with gzip.open(pairspath, 'rt') as f:
             #print("here"
-            results = _process_chunk(pd.read_csv(f, sep='\t',comment="#",header=None),binsize,chrom_sizes)
+            results = _process_chunk(pd.read_csv(f, sep='\t',comment="#",header=None,low_memory=False),binsize,chrom_sizes)
             #print(results)
             combined_bedgraph = results
     else:

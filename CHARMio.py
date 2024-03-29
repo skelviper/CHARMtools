@@ -36,7 +36,7 @@ def parse_pairs(filename:str)->"Cell":
                 break
             comments.append(line)
     #read table format data
-    pairs = pd.read_table(filename, header=None, comment="#")
+    pairs = pd.read_table(filename, header=None, comment="#",low_memory=False)
     pairs.attrs["comments"] = comments
     pairs.attrs["name"], _ = divide_name(filename) # get real sample name
     #assign column names
