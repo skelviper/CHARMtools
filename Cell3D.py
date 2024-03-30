@@ -106,8 +106,8 @@ class Cell3D:
         positions = self.tdg[["chrom","pos"]].copy()
         #positions.loc[:, "start"] = positions["pos"] - resolution//2
         #positions.loc[:, "end"] = positions["pos"] + resolution//2
-        position.start = positions["pos"]
-        position.end = positions["pos"] + resolution
+        positions.start = positions["pos"]
+        positions.end = positions["pos"] + resolution
         positions = positions[["chrom","start","end"]]
 
         if type == "allelic_resolved":
