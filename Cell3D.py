@@ -57,7 +57,8 @@ class Cell3D:
                 fragments.assign(chrom=lambda x: x["chrom"] + "a"),
                 fragments.assign(chrom=lambda x: x["chrom"] + "b")
             ])
-        fragments["pos"] = ((fragments["start"] + fragments["end"]) / 2 + (resolution / 2)) // resolution * resolution
+        #fragments["pos"] = ((fragments["start"] + fragments["end"]) / 2 + (resolution / 2)) // resolution * resolution
+        fragments["pos"] = fragments["start"]
         fragments["pos"] = fragments["pos"].astype(int)
         return fragments.groupby(["chrom", "pos"]).size().reset_index().rename(columns={0: "count"})
 
@@ -103,8 +104,10 @@ class Cell3D:
         if resolution is None:
             resolution = self.resolution
         positions = self.tdg[["chrom","pos"]].copy()
-        positions.loc[:, "start"] = positions["pos"] - resolution//2
-        positions.loc[:, "end"] = positions["pos"] + resolution//2
+        #positions.loc[:, "start"] = positions["pos"] - resolution//2
+        #positions.loc[:, "end"] = positions["pos"] + resolution//2
+        position.start = positions["pos"]
+        position.end = positions["pos"] + resolution
         positions = positions[["chrom","start","end"]]
 
         if type == "allelic_resolved":
@@ -130,7 +133,7 @@ class Cell3D:
         merged_bed = positions_bed.intersect(bedgraph_bed,wa=True,wb=True)
         newcol = merged_bed.to_dataframe()[["chrom","start","end","thickStart"]].groupby(["chrom","start","end"]).sum().reset_index()
         newcol.columns = ["chrom","start","end",column_name]
-        newcol["pos"] = newcol["start"] + resolution//2
+        newcol["pos"] = newcol["start"]
         #self.tdg =
         temp = pd.merge(self.tdg,newcol[["chrom","pos",column_name]],on=["chrom","pos"],how="left")
         temp[column_name] = temp[column_name].fillna(0)
