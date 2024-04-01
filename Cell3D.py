@@ -299,7 +299,9 @@ class Cell3D:
             if start is None:
                 tdg_temp = self.tdg.query("chrom == @chrom").copy()
             else:
-                tdg_temp = self.tdg.query("chrom == @chrom & pos >= @start & pos < @end").copy()
+                start = start // self.resolution * self.resolution
+                resolution = self.resolution
+                tdg_temp = self.tdg.query("chrom == @chrom & pos >= @start & pos < @end + @resolution").copy()
         else:
             tdg_temp = self.tdg.copy()
         if rotate:
@@ -322,21 +324,6 @@ class Cell3D:
 
         return tdg_temp
     
-    # analysis
-
-    # data visualize
-    def plot3D(self,query=None,**kwargs):
-        """
-        Plot the 3D structure of the Cell3D object.
-        """
-        if query is None:
-            plot3D(cell = self.tdg, **kwargs)
-        else:
-            plot3D(cell = self.tdg.query(query), **kwargs)
-
-        
-
-
     # 2. output to cif
     def write_cif(self,factor_b,outputpath = None):
         """
@@ -427,8 +414,29 @@ class Cell3D:
 
         print("Done " + cellname)
         return None
+    
+    # data visualize
+    def plot3D(self,query=None,**kwargs):
+        """
+        Plot the 3D structure of the Cell3D object.
+        """
+        if query is None:
+            plot3D(cell = self.tdg, **kwargs)
+        else:
+            plot3D(cell = self.tdg.query(query), **kwargs)
 
-
+    # analysis
+    def calc_radius_gyration(self,genome_coord):
+        """
+        Calculate the radius of gyration for a given region.
+        """
+        data = self.get_data(genome_coord)
+        # center data
+        data_centered = data[["x", "y", "z"]] - data[["x", "y", "z"]].mean()
+        # calculate radius of gyration
+        radius_gyration = np.sqrt((data_centered ** 2).sum(axis=1).mean())
+        return radius_gyration
+    
     def calc_feature_distances(self,feature_key,quantile,random_seed=0,k=10):
         """
         INPUT:
