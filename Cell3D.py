@@ -301,7 +301,7 @@ class Cell3D:
             else:
                 start = start // self.resolution * self.resolution
                 resolution = self.resolution
-                tdg_temp = self.tdg.query("chrom == @chrom & pos >= @start & pos < @end + @resolution").copy()
+                tdg_temp = self.tdg.query("chrom == @chrom & pos >= @start & pos < @end").copy()
         else:
             tdg_temp = self.tdg.copy()
         if rotate:
