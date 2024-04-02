@@ -57,8 +57,7 @@ class Cell3D:
                 fragments.assign(chrom=lambda x: x["chrom"] + "a"),
                 fragments.assign(chrom=lambda x: x["chrom"] + "b")
             ])
-        #fragments["pos"] = ((fragments["start"] + fragments["end"]) / 2 + (resolution / 2)) // resolution * resolution
-        fragments["pos"] = fragments["start"]
+        fragments["pos"] = ((fragments["start"] + fragments["end"]) / 2) // resolution * resolution
         fragments["pos"] = fragments["pos"].astype(int)
         return fragments.groupby(["chrom", "pos"]).size().reset_index().rename(columns={0: "count"})
 
