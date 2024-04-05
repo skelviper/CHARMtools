@@ -17,6 +17,7 @@ class Cell3D:
         self.features = []
         self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
         self.chrom_length = None
+        self.metadata = {}
 
     def __repr__(self):
         self.get_info()
@@ -28,6 +29,9 @@ class Cell3D:
         print("Resolution: {}".format(self.resolution))
         print("Features: {}".format(self.features))
         print(f"<Chromatin3DStructure with {len(self.tdg)} records>")
+        print("Metadata:")
+        for key, value in self.metadata.items():
+            print(f"  {key}: {value}")
 
     # Construct a Cell3D object
     def _load_tdg(self, tdg_path):
@@ -46,9 +50,30 @@ class Cell3D:
         tdg['chrom_code'] = LE.fit_transform(tdg['chrom'])
         return tdg
 
-    def _load_bed_fragments(path, resolution, type = "allelic_resolved"):
+    def _load_bed_fragments(path, resolution, type = "allelic_resolved",peaks = None,flank = 0):
+        """
+        path: file path of a tsv file containing chrom, start, end, allele, score, strand
+        peaks: a pd.DataFrame containing chrom, start, end
+        """
+        FRIP = None
         fragments = pd.read_csv(path, sep="\t", header=None)
         fragments.columns = ["chrom", "start", "end", "allele", "score", "strand"][:len(fragments.columns)]
+        if peaks is not None:
+            peaks = peaks.copy()
+            peaks.columns = ["chrom", "start", "end"]
+            #peaks["start"] = min(peaks["start"] - flank,0)
+            peaks["start"] = peaks["start"] - flank
+            peaks["start"] = peaks["start"].clip(lower=0)
+            peaks["end"] = peaks["end"] + flank
+            fragments_bed = pybedtools.BedTool.from_dataframe(fragments)
+            peak_bed = pybedtools.BedTool.from_dataframe(peaks)
+            intersect = peak_bed.intersect(fragments_bed,wa=True,wb=True)
+            intersect = intersect.to_dataframe()
+            intersect = intersect.iloc[:,3:9]
+            intersect.columns =  ["chrom", "start", "end", "allele", "score", "strand"]
+            FRIP = intersect.shape[0] / fragments.shape[0]
+            fragments = intersect
+            
         if type == "allelic_resolved":
             fragments = fragments.query("chrom.str.contains('chr')").query('allele != "."')
             fragments = fragments.assign(chrom=np.where(fragments["allele"] == "0", fragments["chrom"] + "a", fragments["chrom"] + "b"))
@@ -59,9 +84,12 @@ class Cell3D:
             ])
         fragments["pos"] = ((fragments["start"] + fragments["end"]) / 2) // resolution * resolution
         fragments["pos"] = fragments["pos"].astype(int)
-        return fragments.groupby(["chrom", "pos"]).size().reset_index().rename(columns={0: "count"})
+        return fragments.groupby(["chrom", "pos"]).size().reset_index().rename(columns={0: "count"}),FRIP
 
     def _load_CpG(CpG_path):
+        """
+        deprecated , use add_bedGraph_data instead
+        """
         CpG = pd.read_csv(CpG_path, header=None, sep="\t")
         CpG.columns = ["chrom", "pos", "CpG"]
         if CpG["chrom"].str.startswith("chr").sum() == 0:
@@ -72,16 +100,20 @@ class Cell3D:
             CpG.assign(chrom=lambda x: x["chrom"] + "b")
         ])    
 
-    def add_bed_data(self, path, column_name, resolution=None,type="allelic_resolved"):
+    def add_bed_data(self, path, column_name, resolution=None,type="allelic_resolved",peaks = None,flank=0):
+
         if resolution is None:
             resolution = self.resolution
         if column_name in self.tdg.columns:
             warnings.warn("Column {} already exists, will be overwritten".format(column_name))
-        fragments = Cell3D._load_bed_fragments(path, resolution,type)
+        
+        fragments,FRIP = Cell3D._load_bed_fragments(path, resolution,type,peaks=peaks,flank=flank)
         self.tdg = pd.merge(self.tdg, fragments, on=["chrom", "pos"], how="left")
         self.tdg[column_name] = self.tdg["count"].fillna(0)
         self.tdg = self.tdg.drop(columns=["count"], axis=1)
         self.features.append(column_name)
+        if FRIP is not None:
+            self.metadata[column_name + "_FRIP"] = FRIP
 
     def add_bedGraph_data(self,path,column_name, resolution=None,type="allelic_resolved"):
         """
@@ -103,10 +135,8 @@ class Cell3D:
         if resolution is None:
             resolution = self.resolution
         positions = self.tdg[["chrom","pos"]].copy()
-        #positions.loc[:, "start"] = positions["pos"] - resolution//2
-        #positions.loc[:, "end"] = positions["pos"] + resolution//2
-        positions.start = positions["pos"]
-        positions.end = positions["pos"] + resolution
+        positions["start"] = positions["pos"]
+        positions["end"] = positions["pos"] + resolution
         positions = positions[["chrom","start","end"]]
 
         if type == "allelic_resolved":
