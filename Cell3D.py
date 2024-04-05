@@ -538,13 +538,6 @@ class Cell3D:
         self.tdg = pd.merge(self.tdg,temp[["chrom","pos","PC1","PC2","PC3","PC1_sign","CompID"]])
             
 
-class MultiCell3D:
-    def __init__(self):
-        pass
-        #self.data = anndata.AnnData()
-        #self.cell3d_objects = {}
-        #self.cellnames = []
-
 #Example
 # from scipy.stats import ks_2samp
 # distances_cell = cell.calc_feature_distances("Random", 0.01, random_seed=1,k=20)
