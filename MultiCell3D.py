@@ -57,8 +57,10 @@ def load_CHARM(enrich_cellnames, path, resolution, CpG_path=None, peaks_atac=Non
             cells = list(tqdm.tqdm(executor.map(process_cell_partial, enrich_cellnames), total=len(enrich_cellnames)))
     finally:
         sys.stderr = original_stderr
-    pybedtools.helpers.cleanup()
-    return MultiCell3D(cells)
+    pybedtools.helpers.cleanup(remove_all=True)
+    #return MultiCell3D(cells)
+    # for dev and debugging
+    return cells
 
 
 class MultiCell3D:
@@ -89,7 +91,7 @@ class MultiCell3D:
     def get_cell(self, cellnames):
         return [self.cells_dict[cellname] for cellname in cellnames]
     
-    def get_distance_matrix(self,genome_coord,cells=None):
+    def calc_distance_matrix(self,genome_coord,cells=None):
         """
         Calculate the distance matrix between cells for a given genomic coordinate.
         if cells is None, all cells will be used.
@@ -101,9 +103,35 @@ class MultiCell3D:
             mats.append(cell.calc_distance_matrix(genome_coord))
         return np.nanmean(mats,axis=0)
 
-    def get_3dproximity_matrix(self,genome_coord,distance_threshold=3,cells=None):
+    #def _calc_distance_matrix(cell, genome_coord):
+    #    return cell.calc_distance_matrix(genome_coord)
+
+    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cells=None,type="normal"):
         """
         Calculate the 3D proximity matrix between cells.
         if cells is None, all cells will be used.
         """
-        pass
+        if cells is None:
+            cells = self.get_cell(self.cellnames)
+        mats = []
+        for cell in tqdm.tqdm(cells):
+            mats.append(cell.calc_distance_matrix(genome_coord) <= distance_threshold)
+        return np.nanmean(mats, axis=0)
+    
+
+    def calc_feature_matrix(self, genome_coord,feature, cells=None):
+        """
+        Get the feature matrix for a given feature.
+        if cells is None, all cells will be used.
+        feature should be present in the cell object feature list.
+        """
+        if cells is None:
+            cells = self.get_cell(self.cellnames)
+        feature_mats = []
+        feature_vecs = []
+        for cell in tqdm.tqdm(cells):
+            feature_mat, feature_vec = cell.calc_feature_matrix(genome_coord, feature)
+            feature_mats.append(feature_mat)
+            feature_vecs.append(feature_vec)
+
+        return np.nanmean(feature_mats,axis=0), np.array(feature_vecs)

@@ -276,6 +276,32 @@ class Cell3D:
                 full_dist_matrix[pos_i, pos_j] = dist_matrix_reconstruct[i, j]
     
         return full_dist_matrix
+    
+    def calc_feature_matrix(self,genome_coord,feature):
+        """
+        INPUT:
+            genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end. \|
+                          whole chromosome is also acceptable. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a
+            feature: str, feature to calculate distance matrix
+        OUTPUT:
+            feature_matrix: symettrical feature matrix of the given region, np.array of shape (n,n)
+            feature_vec: np.array of shape (n,) indicating whether the feature is missing
+        """
+        chrom,start,end = _auto_genome_coord(genome_coord)
+        vec_size = (end-start-1) // self.resolution + 1
+        feature_vec = np.zeros(vec_size)
+        data = self.get_data(genome_coord)
+        for row in data.iterrows():
+            row = row[1]
+            pos = row["pos"] 
+            feature_vec[(pos-start)//self.resolution] = row[feature]
+        feature_vec = feature_vec == 0
+        mat = 1/(self.calc_distance_matrix(genome_coord) + 1)
+        feature_mat = mat.copy()
+        feature_mat[feature_vec,:] = np.nan
+        feature_mat[:,feature_vec] = np.nan
+        return feature_mat,feature_vec
+
 
     # mutate the Cell3D object
     def _point_cloud_rotation(point_cloud, x_angle=None,y_angle=None,z_angle=None):
