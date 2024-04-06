@@ -2,6 +2,64 @@ import numpy as np
 import pandas as pd
 from CHARMtools import Cell3D
 import tqdm
+import concurrent.futures
+import sys
+from functools import partial
+import pybedtools
+
+# handle bedtools warnings 
+class FilteredStderr(object):
+    def __init__(self, target):
+        self.target = target
+        self.ignore_strings = ["has inconsistent naming convention for record:"]
+
+    def write(self, s):
+        # Check if any of the ignore strings are in the message
+        if not any(ignore_string in s for ignore_string in self.ignore_strings):
+            self.target.write(s)
+    
+    def flush(self):
+        self.target.flush()
+
+def _process_cell(enrich_cellname,path, resolution, CpG_path=None, peaks_atac=None, peaks_ct=None, flank=200):
+    cellname = enrich_cellname.replace("EN", "")
+    cell = Cell3D.Cell3D(cellname=cellname,
+                            tdg_path=path + 'hic/processed/{i}/3d_info/clean.20k.0.3dg'.format(i=cellname),
+                            resolution=resolution)
+    if CpG_path is not None:
+        cell.add_bedGraph_data(CpG_path, column_name="CpG", resolution=20000, type="all")
+    if peaks_atac is not None:
+        cell.add_bed_data(path=path + "enrich/processed/atac_all/{i}.atac.frag.bed.gz".format(i=enrich_cellname),
+                            column_name="ATAC", type="all", peaks=peaks_atac, flank=200)
+    else:
+        cell.add_bed_data(path=path + "enrich/processed/atac_all/{i}.atac.frag.bed.gz".format(i=enrich_cellname),
+                            column_name="ATAC", type="all")
+    if peaks_ct is not None:
+        cell.add_bed_data(path=path + "enrich/processed/ct_all/{i}.ct.frag.bed.gz".format(i=enrich_cellname),
+                            column_name="CT", type="all", peaks=peaks_ct, flank=200)
+    else:
+        cell.add_bed_data(path=path + "enrich/processed/ct_all/{i}.ct.frag.bed.gz".format(i=enrich_cellname),
+                            column_name="CT", type="all")
+
+    return cell
+
+def load_CHARM(enrich_cellnames, path, resolution, CpG_path=None, peaks_atac=None, peaks_ct=None, flank=200,num_cores=30):
+    """
+    Construct a MultiCell3D object from the CHARM dataset.
+    """
+    original_stderr = sys.stderr
+    sys.stderr = FilteredStderr(sys.stderr)
+
+    try:
+        with concurrent.futures.ProcessPoolExecutor(num_cores) as executor:
+            process_cell_partial = partial(_process_cell, path=path, resolution=resolution, CpG_path=CpG_path,
+                                           peaks_atac=peaks_atac, peaks_ct=peaks_ct, flank=flank)
+            cells = list(tqdm.tqdm(executor.map(process_cell_partial, enrich_cellnames), total=len(enrich_cellnames)))
+    finally:
+        sys.stderr = original_stderr
+    pybedtools.helpers.cleanup()
+    return MultiCell3D(cells)
+
 
 class MultiCell3D:
     def __init__(self, cells):
