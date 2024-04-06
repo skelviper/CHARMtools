@@ -298,8 +298,10 @@ class Cell3D:
         feature_vec = feature_vec == 0
         mat = 1/(self.calc_distance_matrix(genome_coord) + 1)
         feature_mat = mat.copy()
-        feature_mat[feature_vec,:] = np.nan
-        feature_mat[:,feature_vec] = np.nan
+        # feature_mat[feature_vec,:] = np.nan
+        # feature_mat[:,feature_vec] = np.nan
+        feature_mat[feature_vec,:] = 0
+        feature_mat[:,feature_vec] = 0
         return feature_mat,feature_vec
 
 

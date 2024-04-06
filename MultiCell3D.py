@@ -89,7 +89,15 @@ class MultiCell3D:
         print(f"Features: {self.features}")
 
     def get_cell(self, cellnames):
-        return [self.cells_dict[cellname] for cellname in cellnames]
+        """
+        cellnames can be a list of cellnames or a single cellname.
+        """
+        if isinstance(cellnames, str):
+            return self.cells_dict[cellnames]
+        elif isinstance(cellnames, list):
+            return [self.cells_dict[cellname] for cellname in cellnames]
+        else:
+            raise ValueError("cellnames should be a list or a string.")
     
     def calc_distance_matrix(self,genome_coord,cells=None):
         """
@@ -99,7 +107,7 @@ class MultiCell3D:
         if cells is None:
             cells = self.get_cell(self.cellnames)
         mats = []
-        for cell in tqdm.tqdm(cells):
+        for cell in tqdm.tqdm(self.get_cell(cells)):
             mats.append(cell.calc_distance_matrix(genome_coord))
         return np.nanmean(mats,axis=0)
 
@@ -114,7 +122,7 @@ class MultiCell3D:
         if cells is None:
             cells = self.get_cell(self.cellnames)
         mats = []
-        for cell in tqdm.tqdm(cells):
+        for cell in tqdm.tqdm(self.get_cell(cells)):
             mats.append(cell.calc_distance_matrix(genome_coord) <= distance_threshold)
         return np.nanmean(mats, axis=0)
     
