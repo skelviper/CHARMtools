@@ -298,6 +298,8 @@ class Cell3D:
         feature_vec = feature_vec == 0
         mat = 1/(self.calc_distance_matrix(genome_coord) + 1)
         feature_mat = mat.copy()
+        # it‘s kind of tricky here since 0 leads to CNV and
+        #  NaN leads to overestimate of noise distance/difficult to normalize
         # feature_mat[feature_vec,:] = np.nan
         # feature_mat[:,feature_vec] = np.nan
         feature_mat[feature_vec,:] = 0
@@ -693,8 +695,9 @@ def feature_radial_distribution(cell, feature,random = False,random_seed = 42,if
     tdg["feature_radial_distribution"] = tdg[feature] / tdg[feature].sum() * tdg["radial_distance"]
     return tdg
 
-def calc_feature_distances(cell, feature_key, threshold, points_num_per_chrom=50, points_num_other_chrom=100, random_seed=0):
+def calc_feature_distances_v1(cell, feature_key, threshold, points_num_per_chrom=50, points_num_other_chrom=100, random_seed=0):
     """
+    This is similar to LongCai's method. 
     INPUT: 
         df: charm tdg dataframe from charm_get_3dplot_data
         feature_key: feature to calculate distance
@@ -738,6 +741,11 @@ def calc_feature_distances(cell, feature_key, threshold, points_num_per_chrom=50
 
     return np.array([distances, np.random.choice(random_distances, size=distances.shape[0], replace=False)])
 
+
+def calc_feature_distances_v2():
+    """
+    This is a simple method 
+    """
 
 ### Eample usage ###
 # distances_cell = calc_feature_distances(tdg,"count_ct", 1, points_num_per_chrom=50, points_num_other_chrom=100, random_seed=0)
