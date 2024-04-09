@@ -521,7 +521,7 @@ class Cell3D:
             plot3D(cell = self.tdg.query(query), **kwargs)
 
     # analysis
-    def calc_radial_position(self,if_rank = True,if_norm_max = False):
+    def calc_radial_position(self,if_rank = False,if_norm_max = False, if_norm_mean = True):
         """
         Calculate the radial position of each point.
         """
@@ -532,6 +532,8 @@ class Cell3D:
             data["radial_position"] = data["radial_position"] / data["radial_position"].max()
         if if_rank:
             data["radial_position"] = data["radial_position"].rank(method='first')
+        if if_norm_mean:
+            data["radial_position"] = data["radial_position"] / data["radial_position"].mean()
         self.tdg = data
         self.features.append("radial_position")
         return None

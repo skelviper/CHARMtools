@@ -178,7 +178,7 @@ class MultiCell3D:
         radial_positions = []
         for cell in self.get_cell(self.cellnames):
             radial_positions.append(cell.get_data()[["chrom","pos",key]].set_index(["chrom","pos"]))
-        mat = pd.concat(radial_positions,axis=1).T
+        mat = pd.concat(radial_positions,axis=1)
         mat.index = self.cellnames
         self.matrices[key] = mat
         return None
