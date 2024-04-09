@@ -88,6 +88,7 @@ class MultiCell3D:
         print(f"Object contains {self.num_cells} cells starting with: {self.cellnames[:3]}")
         print(f"Resolutions: {self.resolutions}")
         print(f"Features: {self.features}")
+        print(f"Object contains matrices: {list(self.matrices.keys())}")
 
     def get_cell(self, cellnames):
         """
@@ -100,30 +101,30 @@ class MultiCell3D:
         else:
             raise ValueError("cellnames should be a list or a string.")
     
-    def calc_distance_matrix(self,genome_coord,cells=None):
+    def calc_distance_matrix(self,genome_coord,cellnames=None):
         """
         Calculate the distance matrix between cells for a given genomic coordinate.
         if cells is None, all cells will be used.
         """
-        if cells is None:
-            cells = self.get_cell(self.cellnames)
+        if cellnames is None:
+            cellnames = self.cellnames
         mats = []
-        for cell in tqdm.tqdm(self.get_cell(cells)):
+        for cell in tqdm.tqdm(self.get_cell(cellnames)):
             mats.append(cell.calc_distance_matrix(genome_coord))
         return np.nanmean(mats,axis=0)
 
     #def _calc_distance_matrix(cell, genome_coord):
     #    return cell.calc_distance_matrix(genome_coord)
 
-    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cells=None):
+    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None):
         """
         Calculate the 3D proximity matrix between cells.
         if cells is None, all cells will be used.
         """
-        if cells is None:
-            cells = self.get_cell(self.cellnames)
+        if cellnames is None:
+            cellnames = self.cellnames
         mats = []
-        for cell in tqdm.tqdm(self.get_cell(cells)):
+        for cell in tqdm.tqdm(self.get_cell(cellnames)):
             mats.append(cell.calc_distance_matrix(genome_coord) <= distance_threshold)
         return np.nanmean(mats, axis=0)
     
