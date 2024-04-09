@@ -77,6 +77,7 @@ class MultiCell3D:
             metadata.append(metadata_dict)
 
         self.metadata_df = pd.DataFrame(metadata)
+        self.matrices = {}
 
     def __repr__(self):
         self.get_info()
@@ -114,7 +115,7 @@ class MultiCell3D:
     #def _calc_distance_matrix(cell, genome_coord):
     #    return cell.calc_distance_matrix(genome_coord)
 
-    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cells=None,type="normal"):
+    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cells=None):
         """
         Calculate the 3D proximity matrix between cells.
         if cells is None, all cells will be used.
@@ -143,3 +144,27 @@ class MultiCell3D:
             feature_vecs.append(feature_vec)
 
         return np.nanmean(feature_mats,axis=0), np.array(feature_vecs)
+    
+    def calc_radial_position_matrix(self,key="radial_position",**kwargs):
+        """
+        Calculate radial position in single cell if radial_position is not present in the features for each cell.
+        Combine the radial position for all cells, add to the matrix dictionary
+
+        Params: 
+        key: str, default "radial_position"
+        **kwargs: additional arguments for calc_radial_position
+        """
+        if key not in self.features:
+            for cell in self.get_cell(self.cellnames):
+                cell.calc_radial_position(**kwargs)
+            self.features.append(key)
+        radial_positions = []
+        for cell in self.get_cell(self.cellnames):
+            radial_positions.append(cell.get_data()[["chrom","pos",key]].set_index(["chrom","pos"]))
+        mat = pd.concat(radial_positions,axis=1).T
+        mat.index = self.cellnames
+        self.matrices[key] = mat
+        return None
+
+        
+        

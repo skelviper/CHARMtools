@@ -485,6 +485,53 @@ class Cell3D:
             plot3D(cell = self.tdg.query(query), **kwargs)
 
     # analysis
+    def calc_radial_position(self,if_rank = True,if_norm_max = False):
+        """
+        Calculate the radial position of each point.
+        """
+        data = self.tdg
+        center = data[["x", "y", "z"]].mean()
+        data["radial_position"] = np.sqrt((data[["x", "y", "z"]] - center).pow(2).sum(axis=1))
+        if if_norm_max:
+            data["radial_position"] = data["radial_position"] / data["radial_position"].max()
+        if if_rank:
+            data["radial_position"] = data["radial_position"].rank(method='first')
+        self.tdg = data
+        self.features.append("radial_position")
+        return None
+    
+    def feature_radial_distribution(cell, feature,random = False,random_seed = 42,if_normalize_avg = False,if_rank = False):
+        """
+        TODO: use calc_radial_position if present to avoid recalculation 
+        Calculate the radial distribution of a feature in a Cell3D object.
+
+        Parameters:
+            cell : Cell3D object
+            feature : str
+                Name of the feature to calculate radial distribution for
+        Returns:
+            pd.DataFrame : DataFrame containing the radial distribution
+        """
+        # 1. get center of mass
+        tdg = cell.get_data()
+        center = tdg[["x", "y", "z"]].mean()
+        # 2. get distance to center
+        tdg["radial_distance"] = np.sqrt((tdg["x"] - center["x"]) ** 2 + (tdg["y"] - center["y"]) ** 2 + (tdg["z"] - center["z"]) ** 2) 
+        if if_normalize_avg:
+            tdg["radial_distance"] = tdg["radial_distance"] / tdg["radial_distance"].mean()
+
+        if if_rank:
+            tdg["radial_distance"] = tdg["radial_distance"].rank(method='first')
+
+        # 3. get radial distribution
+        if random:
+            np.random.seed(random_seed)
+            tdg[feature] = tdg[feature].values[np.random.permutation(len(tdg[feature]))]
+            #print("This is a randomization test.")
+
+        tdg["feature_radial_distribution"] = tdg[feature] / tdg[feature].sum() * tdg["radial_distance"]
+        return tdg
+
     def calc_radius_gyration(self,genome_coord):
         """
         Calculate the radius of gyration for a given region.
@@ -663,37 +710,6 @@ def calculate_RMSD(*dataframes):
         median_rmsd = np.median(all_rmsds)
         
         return rms_rmsd, median_rmsd
-
-def feature_radial_distribution(cell, feature,random = False,random_seed = 42,if_normalize_avg = False,if_rank = False):
-    """
-    Calculate the radial distribution of a feature in a Cell3D object.
-
-    Parameters:
-        cell : Cell3D object
-        feature : str
-            Name of the feature to calculate radial distribution for
-    Returns:
-        pd.DataFrame : DataFrame containing the radial distribution
-    """
-    # 1. get center of mass
-    tdg = cell.get_data()
-    center = tdg[["x", "y", "z"]].mean()
-    # 2. get distance to center
-    tdg["radial_distance"] = np.sqrt((tdg["x"] - center["x"]) ** 2 + (tdg["y"] - center["y"]) ** 2 + (tdg["z"] - center["z"]) ** 2) 
-    if if_normalize_avg:
-        tdg["radial_distance"] = tdg["radial_distance"] / tdg["radial_distance"].mean()
-
-    if if_rank:
-        tdg["radial_distance"] = tdg["radial_distance"].rank(method='first')
-
-    # 3. get radial distribution
-    if random:
-        np.random.seed(random_seed)
-        tdg[feature] = tdg[feature].values[np.random.permutation(len(tdg[feature]))]
-        #print("This is a randomization test.")
-
-    tdg["feature_radial_distribution"] = tdg[feature] / tdg[feature].sum() * tdg["radial_distance"]
-    return tdg
 
 def calc_feature_distances_v1(cell, feature_key, threshold, points_num_per_chrom=50, points_num_other_chrom=100, random_seed=0):
     """
