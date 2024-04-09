@@ -146,6 +146,22 @@ class MultiCell3D:
 
         return np.nanmean(feature_mats,axis=0), np.array(feature_vecs)
     
+    def calc_feature_proximity_matrix(self, genome_coord, feature, distance_threshold=3, cells=None):
+        """
+        Calculate the feature proximity matrix between cells.
+        if cells is None, all cells will be used.
+        feature should be present in the cell object feature list.
+        """
+        if cells is None:
+            cells = self.get_cell(self.cellnames)
+        feature_mats = []
+        feature_vecs = []
+        for cell in tqdm.tqdm(cells):
+            feature_mat, feature_vec = cell.calc_feature_proximity_matrix(genome_coord, feature,distance_threshold)
+            feature_mats.append(feature_mat)
+            feature_vecs.append(feature_vec)
+        return np.nanmean(feature_mats, axis=0), np.array(feature_vecs)
+    
     def calc_radial_position_matrix(self,key="radial_position",**kwargs):
         """
         Calculate radial position in single cell if radial_position is not present in the features for each cell.
@@ -166,6 +182,3 @@ class MultiCell3D:
         mat.index = self.cellnames
         self.matrices[key] = mat
         return None
-
-        
-        

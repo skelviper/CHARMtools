@@ -279,6 +279,9 @@ class Cell3D:
     
     def calc_feature_matrix(self,genome_coord,feature):
         """
+
+        !!! Danger Zone!!!
+
         INPUT:
             genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end. \|
                           whole chromosome is also acceptable. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a
@@ -302,6 +305,39 @@ class Cell3D:
         #  NaN leads to overestimate of noise distance/difficult to normalize
         # feature_mat[feature_vec,:] = np.nan
         # feature_mat[:,feature_vec] = np.nan
+        feature_mat[feature_vec,:] = 0
+        feature_mat[:,feature_vec] = 0
+        return feature_mat,feature_vec
+    
+    def calc_feature_proximity_matrix(self,genome_coord,feature,distance_threshold=3):
+        """
+        Calculate the proximity matrix of a feature in a given region.
+
+        Parameters:
+            genome_coord : str
+                Genome coordinates in the format of "chrom:start-end"
+            feature : str
+                Name of the feature
+            distance_threshold : float
+                Distance threshold to consider two points as proximal
+
+        Returns:
+            np.array : Proximity matrix
+        """
+        chrom,start,end = _auto_genome_coord(genome_coord)
+        vec_size = (end-start-1) // self.resolution + 1
+        feature_vec = np.zeros(vec_size)
+        data = self.get_data(genome_coord)
+        for row in data.iterrows():
+            row = row[1]
+            pos = row["pos"] 
+            feature_vec[(pos-start)//self.resolution] = row[feature]
+        feature_vec = feature_vec == 0
+
+        #mat = 1/(self.calc_distance_matrix(genome_coord) + 1)
+        mat = self.calc_distance_matrix(genome_coord) < distance_threshold
+        feature_mat = mat.copy()
+
         feature_mat[feature_vec,:] = 0
         feature_mat[:,feature_vec] = 0
         return feature_mat,feature_vec
