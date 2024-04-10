@@ -6,6 +6,23 @@ import concurrent.futures
 import sys
 from functools import partial
 import pybedtools
+#from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# functions used 
+def _concat_in_chunks(data_chunk):
+    return pd.concat(data_chunk, axis=1)
+
+def _parallel_concat(data, nproc=10):
+    chunk_size = len(data) // nproc
+    data_chunks = [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
+
+    with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+        concatenated_chunks = list(tqdm.tqdm(executor.map(_concat_in_chunks, data_chunks), total=len(data_chunks)))
+    
+    final_result = pd.concat(concatenated_chunks, axis=1)
+    
+    return final_result
+
 
 # handle bedtools warnings 
 class FilteredStderr(object):
@@ -176,9 +193,10 @@ class MultiCell3D:
                 cell.calc_radial_position(**kwargs)
             self.features.append(key)
         radial_positions = []
-        for cell in self.get_cell(self.cellnames):
+        for cell in tqdm.tqdm(self.get_cell(self.cellnames)):
             radial_positions.append(cell.get_data()[["chrom","pos",key]].set_index(["chrom","pos"]))
-        mat = pd.concat(radial_positions,axis=1)
+        #mat = pd.concat(radial_positions,axis=1)
+        mat = _parallel_concat(radial_positions)
         mat.columns = self.cellnames
         self.matrices[key] = mat
         return None
