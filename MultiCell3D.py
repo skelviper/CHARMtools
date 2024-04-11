@@ -142,9 +142,6 @@ class MultiCell3D:
             mats.append(cell.calc_distance_matrix(genome_coord))
         return np.nanmean(mats,axis=0)
 
-    #def _calc_distance_matrix(cell, genome_coord):
-    #    return cell.calc_distance_matrix(genome_coord)
-
     def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None):
         """
         Calculate the 3D proximity matrix between cells.
@@ -154,7 +151,8 @@ class MultiCell3D:
             cellnames = self.cellnames
         mats = []
         for cell in tqdm.tqdm(self.get_cell(cellnames)):
-            mats.append(cell.calc_distance_matrix(genome_coord) <= distance_threshold)
+            distance_matrix = cell.calc_distance_matrix(genome_coord)
+            mats.append(np.where(np.isnan(distance_matrix), np.nan, distance_matrix <= distance_threshold))
         return np.nanmean(mats, axis=0)
     
 
