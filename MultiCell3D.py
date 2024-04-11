@@ -38,6 +38,7 @@ class FilteredStderr(object):
     def flush(self):
         self.target.flush()
 
+# io
 def _process_cell(enrich_cellname,path, resolution, CpG_path=None, peaks_atac=None, peaks_ct=None, flank=200):
     cellname = enrich_cellname.replace("EN", "")
     cell = Cell3D.Cell3D(cellname=cellname,
@@ -79,6 +80,17 @@ def load_CHARM(enrich_cellnames, path, resolution, CpG_path=None, peaks_atac=Non
     # for dev and debugging
     return cells
 
+# analysis
+def chromatic(mat,vec):
+    # resij = matij *veci * vecj
+    res = np.zeros(mat.shape)
+    for i in range(mat.shape[0]):
+        for j in range(mat.shape[1]):
+            if i != j :
+                res[i,j] = mat[i,j] * vec[i] * vec[j]
+            else:
+                res[i,j] = mat[i,j] * vec[i]
+    return res
 
 class MultiCell3D:
     def __init__(self, cells):
