@@ -253,8 +253,11 @@ class MultiCell3D:
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", category=RuntimeWarning)
-                mean_diff = np.nanmean(data1) - np.nanmean(data2)
-            temp_res = pd.DataFrame({"chrom":index[0], "pos":index[1], "mean_diff":mean_diff, "stat":stat, "p_value":p}, index=[0])
+                mean_data1 = np.nanmean(data1)
+                mean_data2 = np.nanmean(data2)
+                mean_diff = mean_data1 - mean_data2
+            temp_res = pd.DataFrame({"chrom":index[0], "pos":index[1],"mean_group1":mean_data1, "mean_group2":mean_data2,
+                                      "mean_diff":mean_diff, "stat":stat, "p_value":p}, index=[0])
             diff.append(temp_res)
 
         diff = pd.concat(diff).dropna()
