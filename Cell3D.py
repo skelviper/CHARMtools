@@ -8,6 +8,11 @@ import pybedtools
 from scipy import stats
 import re
 
+# TODO：
+# 1. 3D inputation for feature
+# 2. escape score calculation in cell 3D
+# 3. "var explained method"
+
 
 class Cell3D:
     def __init__(self, cellname,tdg_path, resolution):

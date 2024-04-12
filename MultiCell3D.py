@@ -6,7 +6,12 @@ import concurrent.futures
 import sys
 from functools import partial
 import pybedtools
-#from concurrent.futures import ThreadPoolExecutor, as_completed
+import warnings
+from scipy import stats
+from statsmodels.stats.multitest import multipletests
+
+# TODO
+# normal load cell function
 
 # functions used 
 def _concat_in_chunks(data_chunk):
@@ -39,7 +44,7 @@ class FilteredStderr(object):
         self.target.flush()
 
 # io
-def _process_cell(enrich_cellname,path, resolution, CpG_path=None, peaks_atac=None, peaks_ct=None, flank=200):
+def _process_cell_CHARM(enrich_cellname,path, resolution, CpG_path=None, peaks_atac=None, peaks_ct=None, flank=200):
     cellname = enrich_cellname.replace("EN", "")
     cell = Cell3D.Cell3D(cellname=cellname,
                             tdg_path=path + 'hic/processed/{i}/3d_info/clean.20k.0.3dg'.format(i=cellname),
@@ -70,7 +75,7 @@ def load_CHARM(enrich_cellnames, path, resolution, CpG_path=None, peaks_atac=Non
 
     try:
         with concurrent.futures.ProcessPoolExecutor(num_cores) as executor:
-            process_cell_partial = partial(_process_cell, path=path, resolution=resolution, CpG_path=CpG_path,
+            process_cell_partial = partial(_process_cell_CHARM, path=path, resolution=resolution, CpG_path=CpG_path,
                                            peaks_atac=peaks_atac, peaks_ct=peaks_ct, flank=flank)
             cells = list(tqdm.tqdm(executor.map(process_cell_partial, enrich_cellnames), total=len(enrich_cellnames)))
     finally:
@@ -79,6 +84,21 @@ def load_CHARM(enrich_cellnames, path, resolution, CpG_path=None, peaks_atac=Non
     #return MultiCell3D(cells)
     # for dev and debugging
     return cells
+
+def _process_cell(cellname,path, resolution):
+    cell = Cell3D.Cell3D(cellname = cellname,tdg_path = path,resolution = resolution)
+    return cell
+
+def load_cells(cellnames, path, resolution, num_cores=20):
+    """
+    cellnames: list of cell names
+    path: list of path of the tdg files
+    resolution: resolution of the tdg files, e.g. 20000
+    num_cores: number of cores to use
+    """
+    with concurrent.futures.ProcessPoolExecutor(num_cores) as executor:
+        cells = list(tqdm.tqdm(executor.map(_process_cell, cellnames, path, [resolution]*len(cellnames)), total=len(cellnames)))
+    return MultiCell3D(cells)
 
 # analysis
 def chromatic(mat,vec):
@@ -210,3 +230,58 @@ class MultiCell3D:
         mat.columns = self.cellnames
         self.matrices[key] = mat
         return None
+
+    def FindMarkers(self, matrix_key,cellnames_group1, cellnames_group2, method = "manwhitneyu"):
+        """
+        Find markers between two groups of cells.
+        """
+        df = self.matrices[matrix_key]
+        diff = []
+        for position in tqdm.tqdm(df.groupby(["chrom","pos"])):
+            index, temp_df = position
+            data1 = temp_df.loc[:,cellnames_group1].values.reshape(1,-1)[0]
+            data2 = temp_df.loc[:,cellnames_group2].values.reshape(1,-1)[0]
+            
+            if len(data1) == 0 or len(data2) == 0:
+                continue
+            if method == "manwhitneyu":
+                stat, p = stats.mannwhitneyu(data1, data2, alternative="two-sided")
+            elif method == "ttest":
+                stat, p = stats.ttest_ind(data1, data2)
+            else:
+                raise ValueError("method should be manwhitneyu or ttest, others not implented yet.")
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=RuntimeWarning)
+                mean_diff = np.nanmean(data1) - np.nanmean(data2)
+            temp_res = pd.DataFrame({"chrom":index[0], "pos":index[1], "mean_diff":mean_diff, "stat":stat, "p_value":p}, index=[0])
+            diff.append(temp_res)
+
+        diff = pd.concat(diff).dropna()
+        diff["p_value_adj"] = multipletests(diff["p_value"], method="fdr_bh")[1]
+
+        return diff
+
+    def zoomify_matrix(self,matrix_key,resolution,combine_allele=True,inplace=False,new_key=None):
+        """
+        Zoomify the matrix to a given resolution.
+        """
+        df=self.matrices[matrix_key].reset_index()
+        df['pos'] = (df['pos'] // resolution) * resolution
+        df.set_index(['chrom', 'pos'], inplace=True)
+        df = df.groupby(level=['chrom', 'pos']).mean()
+        df = df.reset_index()
+
+        if combine_allele:
+            df["type"] = df["chrom"].str[-1]
+            df["chrom"] = df["chrom"].str[:-1]
+            df = df.set_index(["chrom","pos","type"])
+        else:
+            df = df.set_index(["chrom","pos"])
+
+        if inplace:
+            self.matrices[matrix_key] = df
+        else:
+            if new_key is None:
+                new_key = matrix_key + "_zoom" + str(resolution)
+            self.matrices[new_key] = df
