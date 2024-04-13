@@ -112,6 +112,29 @@ def chromatic(mat,vec):
                 res[i,j] = mat[i,j] * vec[i]
     return res
 
+# visualization
+def plot_diff(diff,chrom_plot):
+    """
+    TODO 
+    Plot the difference between two groups of cells.
+    """
+    import matplotlib.pyplot as plt
+    df = diff.query('chrom == @chrom_plot')
+    plt.figure(figsize=(6, 4))
+    plt.plot(df['pos'], df['mean_group1'], label='Group 1', color='blue', alpha=1)
+    plt.plot(df['pos'], df['mean_group2'], label='Group 2', color='red', alpha=1)
+
+    significant_points = df[df['p_value_adj'] < 0.05]
+    for index, row in significant_points.iterrows():
+        plt.axvspan(row['pos'], row['pos'] + 1000000, color='grey', alpha=0.2)
+
+    plt.ylim(0.7,1.3)
+    plt.xlabel(chrom_plot)
+    plt.ylabel('Radial position')
+    plt.legend()
+
+    plt.show()
+
 class MultiCell3D:
     def __init__(self, cells):
         self.cells_dict = {cell.cellname: cell for cell in cells}
