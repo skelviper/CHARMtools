@@ -44,13 +44,35 @@ class FilteredStderr(object):
         self.target.flush()
 
 # io
-def _process_cell_CHARM(enrich_cellname,path, resolution, CpG_path=None, peaks_atac=None, peaks_ct=None, flank=200):
+def _convert_int_resolution_to_string(num:int):
+    """
+    Simplify a number to a shorter format using 'k' for thousands, 'm' for millions, etc.
+    
+    Parameters:
+    num (int): The number to be simplified.
+
+    Returns:
+    str: A simplified version of the number with 'k', 'm', etc.
+    """
+    if num < 1000:
+        return str(num)
+    elif num < 1000000:
+        # Thousands - round to nearest thousand
+        return f"{num // 1000}k"
+    elif num < 1000000000:
+        # Millions - round to nearest million
+        return f"{num // 1000000}m"
+    else:
+        # Billions - round to nearest billion
+        return f"{num // 1000000000}b"
+    
+def _process_cell_CHARM(enrich_cellname,path, resolution, CpG_path=None, peaks_atac=None, peaks_ct=None, flank=200,rep=1):
     cellname = enrich_cellname.replace("EN", "")
     cell = Cell3D.Cell3D(cellname=cellname,
-                            tdg_path=path + 'hic/processed/{i}/3d_info/clean.20k.0.3dg'.format(i=cellname),
+                            tdg_path=path + f'hic/processed/{cellname}/3d_info/clean.{_convert_int_resolution_to_string(resolution)}.{rep}.3dg',
                             resolution=resolution)
     if CpG_path is not None:
-        cell.add_bedGraph_data(CpG_path, column_name="CpG", resolution=20000, type="all")
+        cell.add_bedGraph_data(CpG_path, column_name="CpG", resolution=resolution, type="all")
     if peaks_atac is not None:
         cell.add_bed_data(path=path + "enrich/processed/atac_all/{i}.atac.frag.bed.gz".format(i=enrich_cellname),
                             column_name="ATAC", type="all", peaks=peaks_atac, flank=200)
@@ -81,9 +103,9 @@ def load_CHARM(enrich_cellnames, path, resolution, CpG_path=None, peaks_atac=Non
     finally:
         sys.stderr = original_stderr
     pybedtools.helpers.cleanup(remove_all=True)
-    #return MultiCell3D(cells)
+    return MultiCell3D(cells)
     # for dev and debugging
-    return cells
+    #return cells
 
 def _process_cell(cellname,path, resolution):
     cell = Cell3D.Cell3D(cellname = cellname,tdg_path = path,resolution = resolution)
@@ -154,6 +176,17 @@ class MultiCell3D:
     def __repr__(self):
         self.get_info()
         return ""
+    
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            selected_cellnames = self.cellnames[key]
+            selected_cells = [self.cells_dict[name] for name in selected_cellnames]
+            return MultiCell3D(selected_cells)
+        elif isinstance(key, int):
+            cellname = self.cellnames[key]
+            return self.cells_dict[cellname]
+        else:
+            raise TypeError("Invalid argument type.")
 
     def get_info(self):
         print("CHARMtools MultiCell3D object v0.1")
