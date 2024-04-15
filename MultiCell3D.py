@@ -67,26 +67,30 @@ def _convert_int_resolution_to_string(num:int):
         return f"{num // 1000000000}b"
     
 def _process_cell_CHARM(enrich_cellname,path, resolution, CpG_path=None, peaks_atac=None, peaks_ct=None, flank=200,rep=1):
-    cellname = enrich_cellname.replace("EN", "")
-    cell = Cell3D.Cell3D(cellname=cellname,
-                            tdg_path=path + f'hic/processed/{cellname}/3d_info/clean.{_convert_int_resolution_to_string(resolution)}.{rep}.3dg',
-                            resolution=resolution)
-    if CpG_path is not None:
-        cell.add_bedGraph_data(CpG_path, column_name="CpG", resolution=resolution, type="all")
-    if peaks_atac is not None:
-        cell.add_bed_data(path=path + "enrich/processed/atac_all/{i}.atac.frag.bed.gz".format(i=enrich_cellname),
-                            column_name="ATAC", type="all", peaks=peaks_atac, flank=200)
-    else:
-        cell.add_bed_data(path=path + "enrich/processed/atac_all/{i}.atac.frag.bed.gz".format(i=enrich_cellname),
-                            column_name="ATAC", type="all")
-    if peaks_ct is not None:
-        cell.add_bed_data(path=path + "enrich/processed/ct_all/{i}.ct.frag.bed.gz".format(i=enrich_cellname),
-                            column_name="CT", type="all", peaks=peaks_ct, flank=200)
-    else:
-        cell.add_bed_data(path=path + "enrich/processed/ct_all/{i}.ct.frag.bed.gz".format(i=enrich_cellname),
-                            column_name="CT", type="all")
+    try:
+        cellname = enrich_cellname.replace("EN", "")
+        cell = Cell3D.Cell3D(cellname=cellname,
+                                tdg_path=path + f'hic/processed/{cellname}/3d_info/clean.{_convert_int_resolution_to_string(resolution)}.{rep}.3dg',
+                                resolution=resolution)
+        if CpG_path is not None:
+            cell.add_bedGraph_data(CpG_path, column_name="CpG", resolution=resolution, type="all")
+        if peaks_atac is not None:
+            cell.add_bed_data(path=path + "enrich/processed/atac_all/{i}.atac.frag.bed.gz".format(i=enrich_cellname),
+                                column_name="ATAC", type="all", peaks=peaks_atac, flank=200)
+        else:
+            cell.add_bed_data(path=path + "enrich/processed/atac_all/{i}.atac.frag.bed.gz".format(i=enrich_cellname),
+                                column_name="ATAC", type="all")
+        if peaks_ct is not None:
+            cell.add_bed_data(path=path + "enrich/processed/ct_all/{i}.ct.frag.bed.gz".format(i=enrich_cellname),
+                                column_name="CT", type="all", peaks=peaks_ct, flank=200)
+        else:
+            cell.add_bed_data(path=path + "enrich/processed/ct_all/{i}.ct.frag.bed.gz".format(i=enrich_cellname),
+                                column_name="CT", type="all")
 
-    return cell
+        return cell
+    except Exception as e:
+        print(f"Error processing cell {enrich_cellname}: {e}")
+        return None
 
 def load_CHARM(enrich_cellnames, path, resolution, CpG_path=None, peaks_atac=None, peaks_ct=None, flank=200,num_cores=30):
     """
@@ -103,9 +107,9 @@ def load_CHARM(enrich_cellnames, path, resolution, CpG_path=None, peaks_atac=Non
     finally:
         sys.stderr = original_stderr
     pybedtools.helpers.cleanup(remove_all=True)
-    return MultiCell3D(cells)
+    #return MultiCell3D(cells)
     # for dev and debugging
-    #return cells
+    return cells
 
 def _process_cell(cellname,path, resolution):
     cell = Cell3D.Cell3D(cellname = cellname,tdg_path = path,resolution = resolution)
@@ -134,6 +138,11 @@ def chromatic(mat,vec):
                 res[i,j] = mat[i,j] * vec[i]
     return res
 
+# 这个部分需要添加两个函数，一个是线性回归，看对于ATAC/CT 两个矩阵的情况各自能解释多少结构
+# 另一个是画图，比较一下ATAC mat CT mat 和 Hi-C mat 
+def chromatic_diff():
+    pass
+
 # visualization
 def plot_diff(diff,chrom_plot):
     """
@@ -159,6 +168,8 @@ def plot_diff(diff,chrom_plot):
 
 class MultiCell3D:
     def __init__(self, cells):
+        # remove "None" in cells
+        cells = [cell for cell in cells if cell is not None]
         self.cells_dict = {cell.cellname: cell for cell in cells}
         self.num_cells = len(cells)
         self.cellnames = list(self.cells_dict.keys())
