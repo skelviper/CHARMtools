@@ -216,6 +216,17 @@ class MultiCell3D:
             return [self.cells_dict[cellname] for cellname in cellnames]
         else:
             raise ValueError("cellnames should be a list or a string.")
+        
+    def subset(self,cellnames):
+        """
+        INPUT: list of cellnames 
+        OUTPUT: a new MultiCell3D object 
+        """
+        cells = self.get_cell(cellnames)
+        obj = MultiCell3D(cells)
+        for key in self.matrices.keys():
+            obj.matrices[key] = self.matrices[key].loc[:,cellnames]
+        return obj
     
     def calc_distance_matrix(self,genome_coord,cellnames=None):
         """
