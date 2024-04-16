@@ -12,6 +12,7 @@ import re
 # 1. 3D inputation for feature
 # 2. escape score calculation in cell 3D
 # 3. "var explained method"
+# 4. high resolution support
 
 
 class Cell3D:
