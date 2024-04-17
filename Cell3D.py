@@ -527,22 +527,22 @@ class Cell3D:
             plot3D(cell = self.tdg.query(query), **kwargs)
 
     # analysis
-    def calc_radial_position(self,if_rank = True,if_norm_max = False, if_norm_mean = False):
+    def calc_radial_position(self,key="radial_position",if_rank = False,if_norm_max = False, if_norm_mean = True):
         """
         Calculate the radial position of each point.
         """
         data = self.tdg
         center = data[["x", "y", "z"]].mean()
-        data["radial_position"] = np.sqrt((data[["x", "y", "z"]] - center).pow(2).sum(axis=1))
+        data[key] = np.sqrt((data[["x", "y", "z"]] - center).pow(2).sum(axis=1))
         if if_norm_max:
-            data["radial_position"] = data["radial_position"] / data["radial_position"].max()
+            data[key] = data[key] / data[key].max()
         if if_rank:
-            data["radial_position"] = data["radial_position"].rank(method='first')
-            data["radial_position"] = data["radial_position"] / data["radial_position"].max()
+            data[key] = data[key].rank(method='first')
+            data[key] = data[key] / data[key].max()
         if if_norm_mean:
-            data["radial_position"] = data["radial_position"] / data["radial_position"].mean()
+            data[key] = data[key] / data[key].mean()
         self.tdg = data
-        self.features.append("radial_position")
+        self.features.append(key)
         return None
     
     def feature_radial_distribution(cell, feature,random = False,random_seed = 42,if_normalize_avg = False,if_rank = False):

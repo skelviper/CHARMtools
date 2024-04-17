@@ -298,7 +298,7 @@ class MultiCell3D:
         """
         if key not in self.features:
             for cell in self.get_cell(self.cellnames):
-                cell.calc_radial_position(**kwargs)
+                cell.calc_radial_position(key,**kwargs)
             self.features.append(key)
         radial_positions = []
         for cell in tqdm.tqdm(self.get_cell(self.cellnames)):
