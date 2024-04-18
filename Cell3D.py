@@ -14,6 +14,9 @@ import re
 # 3. "var explained method"
 # 4. high resolution support
 
+# class Cell3Ddask:
+
+
 
 class Cell3D:
     def __init__(self, cellname,tdg_path, resolution):
@@ -502,7 +505,9 @@ class Cell3D:
             chrom_indices[row['chrom']] = chrom_index
             # Get the entity id for this chrom
             entity_id = unique_chroms.index(row['chrom']) + 1
-            cif_str3 += f"ATOM {i+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row[factor_b]}\n"
+            # cif_str3 += f"ATOM {i+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row[factor_b]}\n"
+            index = row["pos"] // self.resolution
+            cif_str3 += f"ATOM {index+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row[factor_b]}\n"
 
         #print(cif_str3)
 
