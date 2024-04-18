@@ -14,6 +14,9 @@ import re
 # 3. "var explained method"
 # 4. high resolution support
 
+# class Cell3Ddask:
+
+
 
 class Cell3D:
     def __init__(self, cellname,tdg_path, resolution):
