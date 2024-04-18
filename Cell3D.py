@@ -17,9 +17,6 @@ import re
 # class Cell3Ddask:
 
 
-# class Cell3Ddask:
-
-
 
 class Cell3D:
     def __init__(self, cellname,tdg_path, resolution):
@@ -507,7 +504,7 @@ class Cell3D:
             # Update the index for this chrom
             chrom_indices[row['chrom']] = chrom_index
             # Get the entity id for this chrom
-            entity_id = row["pos"] // self.resolution
+            entity_id = unique_chroms.index(row['chrom']) + 1
             cif_str3 += f"ATOM {i+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row[factor_b]}\n"
 
         #print(cif_str3)
