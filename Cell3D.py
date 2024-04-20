@@ -7,6 +7,7 @@ import rmsd
 import pybedtools
 from scipy import stats
 import re
+import warnings
 
 # TODO：
 # 1. 3D inputation for feature
@@ -14,7 +15,46 @@ import re
 # 3. "var explained method"
 # 4. high resolution support
 
-# class Cell3Ddask:
+
+import dask.dataframe as dd
+
+class hiresCell3D:
+"""
+hiresCell3D is a class for 3D chromatin structure data at high resolution, support for on-disk data processing.
+"""
+    def __init__(self, cellname,tdg_path, resolution,cache_dir = None):
+        self.cellname = cellname
+        self.tdg = self._load_tdg(tdg_path)
+        self.resolution = resolution
+        self.features = []
+        self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
+        self.chrom_length = None
+        self.metadata = {}
+
+        # save on disk and clean memory
+        if cache_dir is not None:
+            # random access with pyarrow
+            pass
+        else:
+            warnings.warn("Data is not saved on disk, please be aware of the memory usage")
+
+    
+    def _load_tdg(self, tdg_path):
+        if isinstance(tdg_path, pd.DataFrame):
+            tdg = tdg_path.copy()
+        elif isinstance(tdg_path, str):
+            tdg = dd.read_csv(tdg_path, sep="\t", header=None, comment="#")
+        else:
+            raise ValueError("tdg_path should be a pandas.DataFrame or a string")
+        
+        tdg.columns = ["chrom", "pos", "x", "y", "z"]
+        tdg["chrom"] = tdg["chrom"].str.replace("\(pat\)", "a", regex=True)
+        tdg["chrom"] = tdg["chrom"].str.replace("\(mat\)", "b", regex=True)
+        LE = LabelEncoder()
+        tdg.chrom = pd.Categorical(tdg.chrom)
+        tdg['chrom_code'] = LE.fit_transform(tdg['chrom'])
+        return tdg
+
 
 
 
