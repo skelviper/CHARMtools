@@ -33,6 +33,9 @@ import h5py
 
 @dev_only
 class hiresCell3D:
+    """
+    hiresCell3D has actually nothing todo with HiRES, it's just short for high resolution Cell3D. 
+    """
     def __init__(self, cellname, tdg, resolution, cache_dir=None):
         self.cellname = cellname
         self.tdg = self._load_tdg(tdg_path)
