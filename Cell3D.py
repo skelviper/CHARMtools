@@ -18,10 +18,23 @@ import warnings
 
 import dask.dataframe as dd
 
+def dev_only(func):
+    import functools
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if __name__ == "__main__":
+            return func(*args, **kwargs)
+        else:
+            print(f"Skipping {func.__name__} as it's being imported")
+    
+    return wrapper
+
+@dev_only
 class hiresCell3D:
 """
 hiresCell3D is a class for 3D chromatin structure data at high resolution, support for on-disk data processing.
 """
+    import dask.dataframe as dd
     def __init__(self, cellname,tdg_path, resolution,cache_dir = None):
         self.cellname = cellname
         self.tdg = self._load_tdg(tdg_path)
