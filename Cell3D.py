@@ -29,13 +29,11 @@ def dev_only(func):
     
     return wrapper
 
+import h5py
+
 @dev_only
 class hiresCell3D:
-"""
-hiresCell3D is a class for 3D chromatin structure data at high resolution, support for on-disk data processing.
-"""
-    import dask.dataframe as dd
-    def __init__(self, cellname,tdg_path, resolution,cache_dir = None):
+    def __init__(self, cellname, tdg, resolution, cache_dir=None):
         self.cellname = cellname
         self.tdg = self._load_tdg(tdg_path)
         self.resolution = resolution
@@ -44,21 +42,19 @@ hiresCell3D is a class for 3D chromatin structure data at high resolution, suppo
         self.chrom_length = None
         self.metadata = {}
 
-        # save on disk and clean memory
+        # Save on disk and clean memory
         if cache_dir is not None:
-            # random access with pyarrow
-            pass
+            self._save_to_disk(cache_dir)
         else:
             warnings.warn("Data is not saved on disk, please be aware of the memory usage")
-
     
-    def _load_tdg(self, tdg_path):
-        if isinstance(tdg_path, pd.DataFrame):
+    def _load_tdg(self, tdg):
+        if isinstance(tdg, pd.DataFrame):
             tdg = tdg_path.copy()
-        elif isinstance(tdg_path, str):
-            tdg = dd.read_csv(tdg_path, sep="\t", header=None, comment="#")
+        elif isinstance(tdg, str):
+            tdg = dd.read_csv(tdg, sep="\t", header=None, comment="#")
         else:
-            raise ValueError("tdg_path should be a pandas.DataFrame or a string")
+            raise ValueError("tdg should be a pandas.DataFrame or a string")
         
         tdg.columns = ["chrom", "pos", "x", "y", "z"]
         tdg["chrom"] = tdg["chrom"].str.replace("\(pat\)", "a", regex=True)
@@ -67,6 +63,29 @@ hiresCell3D is a class for 3D chromatin structure data at high resolution, suppo
         tdg.chrom = pd.Categorical(tdg.chrom)
         tdg['chrom_code'] = LE.fit_transform(tdg['chrom'])
         return tdg
+
+    def _save_to_disk(self, cache_dir):
+        # Save the DataFrame to an HDF5 file
+        with h5py.File(f"{cache_dir}/{self.cellname}.h5", 'w') as hdf:
+            # Convert DataFrame to HDF5
+            for col in self.tdg.columns:
+                hdf.create_dataset(col, data=self.tdg[col].values)
+        # release memory
+        self.tdg = None
+
+
+    def load_feature_from_disk(self, cache_dir, genome_coord, feature_name = None):
+        """
+        Default load all features.
+        cache_dir: str, path to the cache directory
+        genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end. \|
+                      whole chromosome is also acceptable. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a
+        feature_name: str, name of the feature to load
+        """
+        # Load specific feature data from HDF5 by index range
+        with h5py.File(f"{cache_dir}/{self.cellname}.h5", 'r') as hdf:
+            feature_data = hdf[feature_name][index_range[0]:index_range[1]]
+        return feature_data
 
 
 
