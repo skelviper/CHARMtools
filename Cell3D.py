@@ -604,6 +604,45 @@ class Cell3D:
         else:
             plot3D(cell = self.tdg.query(query), **kwargs)
 
+    def _roated_hic_mat(matrix, h):
+        matrix = np.nan_to_num(matrix)
+        rotated =  rotate(matrix, 45, reshape=True)
+        return rotated[rotated.shape[0]//2-h:rotated.shape[0]//2, :]
+
+    def plotDistanceMatrix(self,genome_coord,type=None,h=None,**kwargs):
+        """
+        Plot the distance matrix of a given region.
+        Parameters:
+            genome_coord : str
+                Genome coordinates in the format of "chrom:start-end"
+            type : str
+                "normal" or "rotate"
+        """
+        import matplotlib.pyplot as plt
+                chrom,start,end = _auto_genome_coord(genome_coord)
+        mat = self.calc_distance_matrix(genome_coord)
+        # extra params
+        cmap = kwargs.get("cmap","YlOrRd")
+        vmin = kwargs.get("vmin",None)
+        vmax = kwargs.get("vmax",None)
+
+        if type == "normal":
+            if vmin and vmax:
+                plt.imshow(mat,cmap=cmap,vmin=vmin,vmax=vmax,extent=[start,end,end,start])
+            else:
+                plt.imshow(mat,cmap=cmap,extent=[start,end,end,start])
+        elif type == "rotate":
+            rotated = _roated_hic_mat(mat,h)
+            if vmin and vmax:
+                plt.imshow(rotated,cmap=cmap,vmin=vmin,vmax=vmax)
+            else:
+                plt.imshow(rotated,cmap=cmap)
+
+        plt.colorbar()
+        plt.show()
+        return None
+
+
     # analysis
     def calc_radial_position(self,key="radial_position",if_rank = False,if_norm_max = False, if_norm_mean = True):
         """
