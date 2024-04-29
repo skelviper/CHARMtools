@@ -619,7 +619,7 @@ class Cell3D:
                 "normal" or "rotate"
         """
         import matplotlib.pyplot as plt
-                chrom,start,end = _auto_genome_coord(genome_coord)
+        chrom,start,end = _auto_genome_coord(genome_coord)
         mat = self.calc_distance_matrix(genome_coord)
         # extra params
         cmap = kwargs.get("cmap","YlOrRd")
