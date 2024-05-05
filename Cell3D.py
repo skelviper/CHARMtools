@@ -94,9 +94,13 @@ class hiresCell3D:
 
 
 class Cell3D:
-    def __init__(self, cellname,tdg_path, resolution):
+    def __init__(self, cellname,resolution,tdg_path=None,pairs_path=None,type="3dg"):
         self.cellname = cellname
-        self.tdg = self._load_tdg(tdg_path)
+        if type == "3dg":
+            self.tdg = self._load_tdg(tdg_path)
+        elif type == "pairs":
+            self.tdg = self._fdg_from_pairs(pairs_path)
+        #self.tdg = self._load_tdg(tdg_path)
         self.resolution = resolution
         self.features = []
         self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
@@ -118,6 +122,91 @@ class Cell3D:
             print(f"  {key}: {value}")
 
     # Construct a Cell3D object
+    @dev_only
+    def _fdg_read_pairs(self,pairs_path):
+        """
+        Read pairs file and return a pandas.DataFrame
+        """
+        data = CHARMio.parse_pairs("./data/mESCP2H3K27me3073.impute.pairs.gz")
+        data = data[data[['phase_prob00','phase_prob01','phase_prob10','phase_prob11']].max(axis=1)>0.9]
+        data["type"] = data[['phase_prob00','phase_prob01','phase_prob10','phase_prob11']].idxmax(axis=1)
+        data["type"] = data["type"].apply(lambda x: x.replace("0","a").replace("1","b").replace("phase_prob",""))
+        data["chr1"] = data["chr1"] + data["type"].apply(lambda x: x[0])
+        data["chr2"] = data["chr2"] + data["type"].apply(lambda x: x[1])
+        data = data[['chr1','pos1','chr2','pos2']]
+        data = data.groupby(['chr1','pos1','chr2','pos2']).size().reset_index().rename(columns={0:"count"})
+        data["count"] = np.log2(data["count"] / data["count"].sum() * 1000 +1)
+
+        return data
+
+    @dev_only
+    def _calc_forces(points, contacts, k_backbone=1, k_repulsion=1, k_contact=1, rep_dist = 1.5,kd_tree="scipy"):
+        num_points = points.shape[0]
+        forces = np.zeros((num_points, 3))
+        
+        # Vectorized backbone forces calculation
+        diffs = points[1:] - points[:-1]
+        dists = np.linalg.norm(diffs, axis=1)
+        diffs /= dists[:, None]  # Normalize
+        force_magnitudes = k_backbone * (dists - 1)
+        forces[:-1] += (force_magnitudes[:, None] * diffs)
+        forces[1:] += (force_magnitudes[:, None] * diffs)
+
+        if kd_tree == "scipy":
+            tree = cKDTree(points)
+        else:
+            tree = build_kdtree(points)
+        for i in range(num_points):
+            if kd_tree == "scipy":
+                idx = tree.query_ball_point(points[i], r=rep_dist)
+            else:
+                idx = query_kdtree(tree, points[i], rep_dist)
+            for j in idx:
+                if i < j:  
+                    diff = points[i] - points[j]
+                    dist = np.linalg.norm(diff)
+                    if dist > 0:
+                        force = k_repulsion * diff / (dist * dist * dist)  
+                        forces[i] += force
+                        forces[j] -= force
+
+        # Calculate contact forces
+        for c in contacts.itertuples():  # Assuming contacts is a DataFrame
+            ind1, ind2, count = c.pos1, c.pos2, c.count
+            diff = points[ind1] - points[ind2]
+            dist = np.linalg.norm(diff)
+            diff = diff / dist
+            if dist > 0:
+                forces[ind1] -= k_contact * diff * dist * count
+                forces[ind2] += k_contact * diff * dist * count
+        
+        return forces
+
+    @dev_only
+    def _fdg(points, contacts, k_backbone=1, k_repulsion=1, k_contact=1, rep_dist=2,num_iter=500, lr=1):
+        points = points.copy()
+        num_points = points.shape[0]
+        for i in tqdm.tqdm(range(num_iter)):
+            forces = calc_forces(points, contacts, k_backbone, k_repulsion, k_contact, rep_dist)
+            points += lr * forces
+            #print(points)
+            # print RMS force
+            if i % 100 == 0:
+                print(np.sqrt(np.mean(forces**2)))
+        return points
+
+    @dev_only
+    def _fdg_from_pairs(self,pairs_path):
+        """
+        Construct a Cell3D object from pairs file.
+        """
+        #init_points()
+
+        contacts = self._fdg_read_pairs(pairs_path)
+
+        points = _fdg(points, contacts, k_backbone=1, k_repulsion=1, k_contact=1, rep_dist=2,num_iter=500, lr=1)
+        return points
+
     def _load_tdg(self, tdg_path):
         if isinstance(tdg_path, pd.DataFrame):
             tdg = tdg_path.copy()
