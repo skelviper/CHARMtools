@@ -46,9 +46,6 @@ def calculate_enrichment(tss_df, fragment_df, bin_size=100, flank=2000, chrom_le
 def plot_enrichment(enrichment_vector, enrichment_score):
     # Set the figure size
     plt.figure(figsize=(4, 4))
-
-    
-    
     # Plot the enrichment vector
     plt.plot(enrichment_vector.sum(axis=0))
 
@@ -65,7 +62,7 @@ def plot_enrichment(enrichment_vector, enrichment_score):
     vec_len = len(enrichment_vector.sum(axis=0))
     plt.xticks([0, vec_len/4, vec_len / 2, vec_len / 4 * 3, vec_len],
                 ["-2k", "-1k", "0", "+1k", "+2k"])
-
+    plt.title("TSS enrichment")
     # Show the plot
     plt.show()
 
