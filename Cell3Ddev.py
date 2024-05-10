@@ -414,7 +414,6 @@ class Cell3D:
     
         return full_dist_matrix
     
-    @dev_only
     def calc_feature_matrix(self,genome_coord,feature):
         """
 
@@ -439,15 +438,10 @@ class Cell3D:
         feature_vec = feature_vec == 0
         mat = 1/(self.calc_distance_matrix(genome_coord) + 1)
         feature_mat = mat.copy()
-        # it‘s kind of tricky here since 0 leads to CNV and
-        #  NaN leads to overestimate of noise distance/difficult to normalize
-        # feature_mat[feature_vec,:] = np.nan
-        # feature_mat[:,feature_vec] = np.nan
         feature_mat[feature_vec,:] = 0
         feature_mat[:,feature_vec] = 0
         return feature_mat,feature_vec
     
-    @dev_only
     def calc_feature_proximity_matrix(self,genome_coord,feature,distance_threshold=3):
         """
         Calculate the proximity matrix of a feature in a given region.
@@ -473,7 +467,6 @@ class Cell3D:
             feature_vec[(pos-start)//self.resolution] = row[feature]
         feature_vec = feature_vec == 0
 
-        #mat = 1/(self.calc_distance_matrix(genome_coord) + 1)
         mat = self.calc_distance_matrix(genome_coord) < distance_threshold
         feature_mat = mat.copy()
 
