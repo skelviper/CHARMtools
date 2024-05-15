@@ -10,8 +10,16 @@ import warnings
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 
-# TODO
-# normal load cell function
+def dev_only(func):
+    import functools
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        if __name__ == "__main__":
+            return func(*args, **kwargs)
+        else:
+            print(f"Skipping {func.__name__} as it's being imported")
+    
+    return wrapper
 
 # functions used 
 def _concat_in_chunks(data_chunk):
@@ -366,3 +374,9 @@ class MultiCell3D:
             if new_key is None:
                 new_key = matrix_key + "_zoom" + str(resolution)
             self.matrices[new_key] = df
+
+    def simple_diff(self,cellnames_group1,cellnames_group2,genome_coord = None):
+        """
+        Calculate 
+        """
+        
