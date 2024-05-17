@@ -7,6 +7,7 @@ from scipy import stats
 import re
 from sklearn.preprocessing import LabelEncoder
 import pybedtools
+import os
 
 def dev_only(func):
     import functools
@@ -37,7 +38,7 @@ class Cell3D:
         self.metadata = {}
 
         if on_disk:
-            self._obj_to_disk(on_disk_path)
+            self.to_disk(on_disk_path)
 
     def __repr__(self):
         self.get_info()
@@ -156,9 +157,12 @@ class Cell3D:
             self.on_disk_path = f"{self.cellname}.h5"
             warnings.warn("No path provided, saving to default path ./")
         elif on_disk_path != None:
-            self.on_disk_path = on_disk_path
+            self.on_disk_path = on_disk_path + "/" + f"{self.cellname}.h5"
 
         self.on_disk = True
+        # create path if folder does not exist
+        if not os.path.exists(os.path.dirname(self.on_disk_path)):
+            os.makedirs(os.path.dirname(self.on_disk_path))
         with pd.HDFStore(self.on_disk_path) as diskfile:
             diskfile.put("tdg", self.tdg,format="table",data_columns=True)
         self.tdg = None
@@ -280,7 +284,7 @@ class Cell3D:
         fragments.columns = ["chrom", "start", "end", "allele", "score", "strand"][:len(fragments.columns)]
         if peaks is not None:
             peaks = peaks.copy()
-            peaks.columns = ["chrom", "start", "end"]
+            peaks.columns = ["chrom", "start", "end"] 
             #peaks["start"] = min(peaks["start"] - flank,0)
             peaks["start"] = peaks["start"] - flank
             peaks["start"] = peaks["start"].clip(lower=0)
