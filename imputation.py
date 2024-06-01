@@ -1,5 +1,6 @@
 # Hi-C matrix imputation relatred code
 
+import torch
 import os
 import glob
 import numpy as np
@@ -108,7 +109,45 @@ def normalize_matrix(matrix):
     
     return normalized_matrix
 
-# CtG
+## scHiCluster GPU
+def solve_rwr_inverse(stoch_matrix, alpha=0.05, device='cuda'):
+    with torch.no_grad():
+        m = stoch_matrix * (1 - alpha)
+        m = m.T
+        y = torch.eye(m.shape[0], device=device, dtype=torch.float32)
+        A = y - m
+
+        s = torch.linalg.solve(A, y)
+
+        s *= alpha
+        s = s + s.T.clone()  
+
+        return s
+
+def schicluster_imputation_for_mat(mat, alpha=0.05, kernel_size=3, sigma=2, if_convolve=True, scale_factor=1e5, device='cuda'):
+    gauss_kernel_1d = signal.windows.gaussian(kernel_size, std=sigma)
+    gauss_kernel_2d = np.outer(gauss_kernel_1d, gauss_kernel_1d)
+
+    if if_convolve:
+        mat = ndimage.convolve(mat, gauss_kernel_2d, mode='constant', cval=0.0)
+
+    np.fill_diagonal(mat[1:, :-1], mat[1:, :-1] + 1)
+    np.fill_diagonal(mat[:-1, 1:], mat[:-1, 1:] + 1)
+
+    mat = mat / np.nansum(mat, axis=0)
+
+    mat = torch.tensor(mat, dtype=torch.float32, device=device)
+    mat = solve_rwr_inverse(mat, alpha, device=device)
+    mat = mat / torch.nansum(mat) * scale_factor
+    return mat.cpu().numpy()
+
+
+
+## CtG
+# implentation of the CtG imputaion algorithm for Hi-C data and compared with others.
+# ref: Computational Enhanced Hi-C data reveals the function of structural geometry in genomic regulation  
+#      https://doi.org/10.1101/2022.07.12.499232
+# original authos: Yueying He et al.
 def ctg_impute(W, lambda_=4):
     # Calculate the degree matrix D
     # since the inverse of D is used, we need to make sure that the diagonal elements of D are not 0
@@ -177,3 +216,72 @@ def ctg_impute_v2(W, iterations=20, alpha=0.3):
     L1_distance_matrix = compute_L1_distance(iterated_matrix)
 
     return L1_distance_matrix
+
+## BandNorm
+def readSingleCellCount(file):
+    contactMatrix = pd.read_csv(file,sep="\t",names=["chr1","bin1","chr2","bin2","diag","count"])
+    # treat all inter contacts as one band
+    thisCellInterCount = contactMatrix.query('diag == "-1"')['count'].sum(axis=0)
+
+    # calc intra band per chromosome
+    thisCellIntraCount = contactMatrix.query('chr1 == chr2')[['chr1','diag','count']].groupby(by = ['chr1','diag']).sum()
+    return [thisCellIntraCount,thisCellInterCount]
+
+def generateBandnormFactor(filepath:list,ncpus=40) -> typing.Tuple[pd.DataFrame,int]:
+    cellNum = len(filepath)
+    totalCellInterCount = 0
+    totalCellIntraCount = []
+
+    result = []
+
+    with Pool(ncpus) as p:
+        result += p.map(readSingleCellCount,filepath)
+
+    for i in result:
+        totalCellIntraCount.append(i[0])
+        totalCellInterCount+=i[1]
+
+    totalCellIntraCount = pd.concat(totalCellIntraCount).groupby(by = ['chr1','diag']).sum()
+    totalCellIntraCount['count'] = totalCellIntraCount['count'] / cellNum 
+    totalCellInterCount = totalCellInterCount / cellNum
+    
+    return totalCellIntraCount,totalCellInterCount
+
+def normCell(intraCount:pd.DataFrame, interCount:int, contactMatrix:pd.DataFrame) -> pd.DataFrame:
+    """
+    input: inter/intraCount represent average count of the experiment,
+        contactMatrix is contactMatrix of the current cell.
+    """
+    # calc intra part
+    thisCellIntra = contactMatrix.query('chr1 == chr2')[['chr1','diag','count']].groupby(by = ['chr1','diag']).sum() 
+    normFactorIntra = pd.merge(thisCellIntra,intraCount,how = 'left',on = ["chr1","diag"])
+    normFactorIntra = normFactorIntra.assign(normFactor = lambda line: line.count_y / line.count_x)[["normFactor"]]
+
+    intraDF = pd.merge(contactMatrix.query('chr1 == chr2'),normFactorIntra,on=['chr1','diag'])
+    intraDF['normCount'] = intraDF['count'] * intraDF['normFactor']
+    intraDF = intraDF[["chr1","bin1","chr2","bin2","normCount"]]
+
+    # calc inter part
+    interDF = contactMatrix.query('chr1 != chr2')
+    normFactorInter = interCount / interDF['count'].sum(axis=0)
+    interDF['normCount'] = interDF['count'] * normFactorInter
+    interDF = interDF[["chr1","bin1","chr2","bin2","normCount"]]
+    # combine result and return
+    return pd.concat([interDF,intraDF])
+    
+def cell2csr_mat(cellMat:pd.DataFrame,chrAdder:pd.DataFrame,resolution:int) -> pd.DataFrame:
+    """
+    chrAdder is a dataframe generate by :
+        chrAdder = pd.read_csv("/share/home/zliu/project/gradProject/BubbleCluster/otherFiles/chr.len.hg19.tsv",
+                sep="\t",names=["chr","len","adding"])[["chr","adding"]]
+
+    output: 	bin1abs	bin2abs	normCount
+                0	0	282	1.909429
+                1	0	286	0.954715
+    """
+    chrAdderDict = chrAdder.set_index('chr').to_dict()['adding']
+ 
+    cellMat['bin1abs'] = cellMat.apply(lambda row: math.floor((row.bin1 + chrAdderDict[row['chr1']])/resolution), axis=1)
+    cellMat['bin2abs'] = cellMat.apply(lambda row: math.floor((row.bin2 + chrAdderDict[row['chr2']])/resolution), axis=1)
+
+    return cellMat[["bin1abs","bin2abs","normCount"]]
