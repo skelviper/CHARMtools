@@ -250,6 +250,54 @@ class Cell3D:
 
         return tdg_temp
     
+    def get_feature_vec(self, genome_coord, column_name):
+        """
+        INPUT:
+            genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end. \|
+                        whole chromosome is also acceptable. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a"
+            column_name: str, the name of the column to extract the feature vector from.
+        OUTPUT:
+            feature_vec: np.array of the feature vector for the given region.
+        """
+        chrom, start, end = _auto_genome_coord(genome_coord)
+
+        if start is None and self.chrom_length is None:
+            raise ValueError("Running whole chromosome calculation with chrom_length is not available, |\
+                                please run add_chrom_length first")
+
+        if start is None:
+            matsize = self.chrom_length.query("chrom == @chrom")["size"].values[0] // self.resolution + 1
+            reconstruct_df = self.get_data(genome_coord)
+        else:
+            matsize = (end - start - 1) // self.resolution + 1
+            reconstruct_df = self.get_data(genome_coord)
+            reconstruct_df["pos"] = reconstruct_df["pos"] - start
+
+        reconstruct_df["pos"] = reconstruct_df["pos"] // self.resolution
+
+        # Extract the feature vector from the specified column
+        if column_name not in reconstruct_df.columns:
+            raise ValueError(f"Column '{column_name}' not found in the data")
+
+        feature_vec = np.full(matsize, np.nan)
+        for pos, value in zip(reconstruct_df["pos"], reconstruct_df[column_name]):
+            feature_vec[pos] = value
+
+        return feature_vec
+    
+    def subset(self,genome_coord):
+        """
+        Subset the Cell3D object to a given genome coordinate.
+
+        Parameters:
+            genome_coord : str
+                Genome coordinates in the format of "chrom:start-end"
+        """
+        self.tdg = self.get_data(genome_coord)
+        self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
+        self.record_size = len(self.tdg)
+        return None
+
     def _point_cloud_rotation(point_cloud, x_angle=None,y_angle=None,z_angle=None):
         """
         Rotate point cloud by x,y,z angle and return the rotated point cloud in numpy array of shape (n,3)
@@ -787,7 +835,7 @@ class Cell3D:
         chrom,start,end = _auto_genome_coord(genome_coord)
         mat = self.calc_distance_matrix(genome_coord)
         # extra params
-        cmap = kwargs.get("cmap","YlOrRd")
+        cmap = kwargs.get("cmap","YlOrRd_r")
         vmin = kwargs.get("vmin",None)
         vmax = kwargs.get("vmax",None)
 
