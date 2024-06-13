@@ -274,14 +274,19 @@ class Cell3D:
         return point_cloud
     
     # Functions to load charm features
-    def _load_bed_fragments(path, resolution, type = "allelic_resolved",peaks = None,flank = 0):
+    def _load_bed_fragments(path, resolution, type = "allelic_resolved",peaks = None,flank = 0,keep_3prime = True):
         """
         path: file path of a tsv file containing chrom, start, end, allele, score, strand
         peaks: a pd.DataFrame containing chrom, start, end
+
+        keep_3prime: bool, whether to trim the fragments to 3' end only
         """
         FRIP = None
         fragments = pd.read_csv(path, sep="\t", header=None)
         fragments.columns = ["chrom", "start", "end", "allele", "score", "strand"][:len(fragments.columns)]
+        if keep_3prime:
+            fragments = fragments.assign(start=lambda x: np.where(x["strand"] == "+", x["end"] - 1, x["start"]))
+            fragments = fragments.assign(end=lambda x: np.where(x["strand"] == "+", x["end"], x["start"] + 1))
         if peaks is not None:
             peaks = peaks.copy()
             peaks.columns = ["chrom", "start", "end"] 
@@ -324,7 +329,7 @@ class Cell3D:
             CpG.assign(chrom=lambda x: x["chrom"] + "b")
         ])    
 
-    def add_bed_data(self, path, column_name, resolution=None,type="allelic_resolved",peaks = None,flank=0):
+    def add_bed_data(self, path, column_name, resolution=None,type="allelic_resolved",peaks = None,flank=0,keep_3prime=True):
 
         if resolution is None:
             resolution = self.resolution
@@ -334,7 +339,7 @@ class Cell3D:
         if self.on_disk:
             self.to_memory()
         
-        fragments,FRIP = Cell3D._load_bed_fragments(path, resolution,type,peaks=peaks,flank=flank)
+        fragments,FRIP = Cell3D._load_bed_fragments(path, resolution,type,peaks=peaks,flank=flank,keep_3prime=keep_3prime)
         self.tdg = pd.merge(self.tdg, fragments, on=["chrom", "pos"], how="left")
         self.tdg[column_name] = self.tdg["count"].fillna(0)
         self.tdg = self.tdg.drop(columns=["count"], axis=1)
@@ -450,13 +455,15 @@ class Cell3D:
             avgs = [self.tdg[feature].iloc[indices].mean() for indices in indices_list]
         elif type =="sum":
             avgs = [self.tdg[feature].iloc[indices].sum() for indices in indices_list]
+        elif type == "countall": 
+            avgs = [len(indices) for indices in indices_list]
         else:
-            raise ValueError("type should be mean or sum")
+            raise ValueError("type should be mean or sum or countall")
         if if_rank:
             avgs = rankdata(avgs,nan_policy="omit") / sum(np.isfinite(avgs))
 
         self.tdg[feature + "_" + type + "_in_radius_" + str(radius)] = avgs
-        self.features.append(feature + "_avg_in_radius" + str(radius))
+        self.features.append(feature + "_" + type + "_in_radius" + str(radius))
         return None
 
     def add_chrom_length(self,chrom_length_path):
