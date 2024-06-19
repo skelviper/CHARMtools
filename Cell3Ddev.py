@@ -476,7 +476,7 @@ class Cell3D:
         self.tdg["knn_density_"+str(k)] = np.array(densities)
         return None
 
-    def add_feature_in_radius(self, feature, radius,type = "mean",if_self = False,if_rank = False):
+    def add_feature_in_radius(self, feature, radius,type = "mean",if_self = False,if_rank = False,add_self=True):
         """
         Smooth given feature by averaging or summing over a sphere of given radius.
 
@@ -509,9 +509,15 @@ class Cell3D:
             raise ValueError("type should be mean or sum or countall")
         if if_rank:
             avgs = rankdata(avgs,nan_policy="omit") / sum(np.isfinite(avgs))
+        
+        # avgs nan to 0
+        avgs = np.array(avgs)
+        avgs[np.isnan(avgs)] = 0
 
         self.tdg[feature + "_" + type + "_in_radius_" + str(radius)] = avgs
         self.features.append(feature + "_" + type + "_in_radius" + str(radius))
+        if add_self:
+            self.tdg[feature + "_" + type + "_in_radius_" + str(radius)] = self.tdg[feature + "_" + type + "_in_radius_" + str(radius)] + self.tdg[feature]
         return None
 
     def add_chrom_length(self,chrom_length_path):
