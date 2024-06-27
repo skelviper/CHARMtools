@@ -8,6 +8,7 @@ import re
 from sklearn.preprocessing import LabelEncoder
 import pybedtools
 import os
+import tqdm
 
 def dev_only(func):
     import functools
@@ -519,6 +520,39 @@ class Cell3D:
         if add_self:
             self.tdg[feature + "_" + type + "_in_radius_" + str(radius)] = self.tdg[feature + "_" + type + "_in_radius_" + str(radius)] + self.tdg[feature]
         return None
+
+    def calc_intermingling(self,radius=3):
+        """
+        Calculate the intermingling score of the given region.
+        intermingling_ratio = number of different chromosome points in radius / number of points in radius
+        intermingling_index = −∑pilnpi, where pi denoted the fraction of nearby particles from chromosome i)
+
+        Parameters:
+            radius : float
+        """
+        if self.on_disk:
+            self.to_memory()
+        indices_list = self.kdtree.query_ball_tree(self.kdtree, r=radius)
+        intermingling_ratios = []
+        intermingling_indexes = []
+        for indices in indices_list:
+            temp_df = self.tdg.iloc[indices]
+            # for intermingling ratio
+            self_chrom = temp_df["chrom"].iloc[0]
+            intermingling_ratios.append((temp_df["chrom"] != self_chrom).sum() / len(temp_df))
+            # for intermingling index
+            tempindxes = []
+            for chroms in temp_df["chrom"].unique():
+                pi = (temp_df["chrom"] == chroms).sum() / len(temp_df)
+                tempindxes.append(pi * np.log(pi))
+            intermingling_indexes.append(-sum(tempindxes))
+        self.tdg["intermingling_ratio"] = intermingling_ratios
+        self.tdg["intermingling_index"] = intermingling_indexes
+        self.features.append("intermingling_ratio") 
+        self.features.append("intermingling_index")
+        return None
+
+
 
     def add_chrom_length(self,chrom_length_path):
         chrom_length = pd.read_csv(chrom_length_path,sep="\t",header=None)
