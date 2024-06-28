@@ -9,6 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 import pybedtools
 import os
 import tqdm
+import copy
 
 def dev_only(func):
     import functools
@@ -286,7 +287,7 @@ class Cell3D:
 
         return feature_vec
     
-    def subset(self,genome_coord):
+    def subset(self,genome_coord,in_place=False):
         """
         Subset the Cell3D object to a given genome coordinate.
 
@@ -294,10 +295,19 @@ class Cell3D:
             genome_coord : str
                 Genome coordinates in the format of "chrom:start-end"
         """
-        self.tdg = self.get_data(genome_coord)
-        self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
-        self.record_size = len(self.tdg)
-        return None
+        if in_place:
+            self.tdg = self.get_data(genome_coord)
+            self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
+            self.record_size = len(self.tdg)
+            return None
+        else:
+            new_cell = copy.deepcopy(self)
+            new_cell.cellname = self.cellname + "_subset"
+            new_cell.tdg = new_cell.get_data(genome_coord)
+            new_cell.kdtree = cKDTree(new_cell.tdg[["x", "y", "z"]].values)
+            new_cell.record_size = len(new_cell.tdg)
+            return new_cell
+
 
     def _point_cloud_rotation(point_cloud, x_angle=None,y_angle=None,z_angle=None):
         """
@@ -862,7 +872,7 @@ class Cell3D:
         rotated =  rotate(matrix, 45, reshape=True)
         return rotated[rotated.shape[0]//2-h:rotated.shape[0]//2, :]
 
-    def plotDistanceMatrix(self,genome_coord,type=None,h=None,**kwargs):
+    def plotDistanceMatrix(self,genome_coord,type="normal",h=None,**kwargs):
         """
         Plot the distance matrix of a given region.
         Parameters:
@@ -894,6 +904,37 @@ class Cell3D:
         plt.colorbar()
         plt.show()
         return None
+    
+    def expandStructure(self, expand_factor=3, inplace=False):
+        """
+        Center the structure ,calculate center for each chromosome and expand the structure by multiple dist(chromcenter to center)
+        Parameters:
+            expand_factor: int, default 3
+        """
+        if self.on_disk:
+            self.to_memory()
+        tdg = self.tdg.copy()
+        center = tdg[["x", "y", "z"]].mean()
+        tdg[["x", "y", "z"]] = (tdg[["x", "y", "z"]] - center)
+        
+        chrom_centers = tdg.groupby("chrom")[["x", "y", "z"]].transform("mean")
+        tdg["chrom_center_x"] = chrom_centers["x"]
+        tdg["chrom_center_y"] = chrom_centers["y"]
+        tdg["chrom_center_z"] = chrom_centers["z"]
+        
+        tdg[["x", "y", "z"]] = tdg[["x", "y", "z"]] + chrom_centers * expand_factor
+        # drop chrom_center_x,y,z columns
+        tdg = tdg.drop(columns=["chrom_center_x", "chrom_center_y", "chrom_center_z"], axis=1)
+        
+        if inplace:
+            self.tdg = tdg
+        else:
+            cellnew = copy.deepcopy(self)
+            cellnew.tdg = tdg
+            cellnew.cellname = self.cellname + "_expanded"
+            return cellnew
+
+
 
 
     # analysis
