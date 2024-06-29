@@ -287,7 +287,7 @@ class Cell3D:
 
         return feature_vec
     
-    def subset(self,genome_coord,in_place=False):
+    def subset(self,genome_coord,query=None,in_place=False):
         """
         Subset the Cell3D object to a given genome coordinate.
 
@@ -296,14 +296,21 @@ class Cell3D:
                 Genome coordinates in the format of "chrom:start-end"
         """
         if in_place:
-            self.tdg = self.get_data(genome_coord)
+            if query is not None:
+                self.tdg = self.get_data(genome_coord).query(query)
+            else:
+                self.tdg = self.get_data(genome_coord)
             self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
             self.record_size = len(self.tdg)
             return None
         else:
             new_cell = copy.deepcopy(self)
             new_cell.cellname = self.cellname + "_subset"
-            new_cell.tdg = new_cell.get_data(genome_coord)
+            if query is not None:
+                new_cell.tdg = self.get_data(genome_coord).query(query)
+            else:
+                new_cell.tdg = new_cell.get_data(genome_coord)
+
             new_cell.kdtree = cKDTree(new_cell.tdg[["x", "y", "z"]].values)
             new_cell.record_size = len(new_cell.tdg)
             return new_cell
@@ -512,7 +519,7 @@ class Cell3D:
             column_name = "UMI"
         mergedf = pd.concat([rnag1m,rnag2m])
         mergedf.columns = ['chrom','pos',column_name]
-        mergedf.groupby(['chrom','pos']).sum().reset_index()
+        mergedf = mergedf.groupby(['chrom','pos']).sum().reset_index()
 
         df = pd.merge(self.tdg,mergedf,on=['chrom','pos'],how='left')
         df[column_name] = df[column_name].fillna(0)
