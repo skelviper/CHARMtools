@@ -374,19 +374,19 @@ class Cell3D:
         fragments["pos"] = fragments["pos"].astype(int)
         return fragments.groupby(["chrom", "pos"]).size().reset_index().rename(columns={0: "count"}),FRIP
 
-    def _load_CpG(CpG_path):
-        """
-        deprecated , use add_bedGraph_data instead
-        """
-        CpG = pd.read_csv(CpG_path, header=None, sep="\t")
-        CpG.columns = ["chrom", "pos", "CpG"]
-        if CpG["chrom"].str.startswith("chr").sum() == 0:
-            CpG["chrom"] = "chr" + CpG["chrom"]
-        CpG["pos"] = CpG["pos"].astype(int)
-        return pd.concat([
-            CpG.assign(chrom=lambda x: x["chrom"] + "a"),
-            CpG.assign(chrom=lambda x: x["chrom"] + "b")
-        ])    
+    # def _load_CpG(CpG_path):
+    #     """
+    #     deprecated , use add_bedGraph_data instead
+    #     """
+    #     CpG = pd.read_csv(CpG_path, header=None, sep="\t")
+    #     CpG.columns = ["chrom", "pos", "CpG"]
+    #     if CpG["chrom"].str.startswith("chr").sum() == 0:
+    #         CpG["chrom"] = "chr" + CpG["chrom"]
+    #     CpG["pos"] = CpG["pos"].astype(int)
+    #     return pd.concat([
+    #         CpG.assign(chrom=lambda x: x["chrom"] + "a"),
+    #         CpG.assign(chrom=lambda x: x["chrom"] + "b")
+    #     ])    
 
     def add_bed_data(self, path, column_name, resolution=None,type="allelic_resolved",peaks = None,flank=0,keep_3prime=True):
 
@@ -464,13 +464,61 @@ class Cell3D:
         self.tdg = temp
         self.features.append(column_name)
 
-    def add_CpG_data(self, path):
+    # def add_CpG_data(self, path):
+    #     if self.on_disk:
+    #         self.to_memory()
+
+    #     CpG = Cell3D._load_CpG(path)
+    #     self.features.append("CpG")
+    #     self.tdg = pd.merge(self.tdg, CpG, on=["chrom", "pos"], how="left")
+        
+    def add_RNA_data(self, rnag1, rnag2, genes,cellname = None, column_name=None):
+        """
+        Add RNA data to the Cell3D object.
+
+        Parameters:
+            genome1_rnamatrix : np.array
+                RNA matrix of genome 1 (chr[]b)
+            genome2_rnamatrix : np.array
+                RNA matrix of genome 2 (chr[]a)
+            column_name : str
+                Name of the column to be added
+
+        Returns:
+            None
+        """
         if self.on_disk:
             self.to_memory()
 
-        CpG = Cell3D._load_CpG(path)
-        self.features.append("CpG")
-        self.tdg = pd.merge(self.tdg, CpG, on=["chrom", "pos"], how="left")
+        if cellname is None:
+            cellname = self.cellname
+
+        resolution = self.resolution
+        genes = genes.copy()
+        genes.columns = ['chrom','start','end','id','gene','strand']
+        genes['tss'] = genes.apply(lambda x: x['start'] if x['strand'] == '+' else x['end'], axis=1)
+        genes['tss'] = genes['tss']//resolution*resolution
+        genes = genes[["chrom","tss","gene"]]
+
+        rnag1m = rnag1[['gene',cellname]]
+        rnag2m = rnag2[['gene',cellname]]
+
+        rnag1m = rnag1m.merge(genes, left_on='gene', right_on='gene', how='left')[['chrom','tss',cellname]]
+        rnag2m = rnag2m.merge(genes, left_on='gene', right_on='gene', how='left')[['chrom','tss',cellname]]
+        rnag1m['chrom'] = rnag1m['chrom'].apply(lambda x: x + "b")
+        rnag2m['chrom'] = rnag2m['chrom'].apply(lambda x: x + "a")
+
+        if column_name is None:
+            column_name = "UMI"
+        mergedf = pd.concat([rnag1m,rnag2m])
+        mergedf.columns = ['chrom','pos',column_name]
+        mergedf.groupby(['chrom','pos']).sum().reset_index()
+
+        df = pd.merge(self.tdg,mergedf,on=['chrom','pos'],how='left')
+        df[column_name] = df[column_name].fillna(0)
+        self.tdg = df
+        self.features.append(column_name)
+        return None
     
     def add_knn_density(self, k):
         """
