@@ -297,9 +297,9 @@ class Cell3D:
         """
         if in_place:
             if query is not None:
-                self.tdg = self.get_data(genome_coord).query(query)
+                self.tdg = self.get_data(genome_coord).query(query).reset_index(drop=True)
             else:
-                self.tdg = self.get_data(genome_coord)
+                self.tdg = self.get_data(genome_coord).reset_index(drop=True)
             self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
             self.record_size = len(self.tdg)
             return None
@@ -307,9 +307,9 @@ class Cell3D:
             new_cell = copy.deepcopy(self)
             new_cell.cellname = self.cellname + "_subset"
             if query is not None:
-                new_cell.tdg = self.get_data(genome_coord).query(query)
+                new_cell.tdg = self.get_data(genome_coord).query(query).reset_index(drop=True)
             else:
-                new_cell.tdg = new_cell.get_data(genome_coord)
+                new_cell.tdg = new_cell.get_data(genome_coord).reset_index(drop=True)
 
             new_cell.kdtree = cKDTree(new_cell.tdg[["x", "y", "z"]].values)
             new_cell.record_size = len(new_cell.tdg)
@@ -372,6 +372,9 @@ class Cell3D:
         if type == "allelic_resolved":
             fragments = fragments.query("chrom.str.contains('chr')").query('allele != "."')
             fragments = fragments.assign(chrom=np.where(fragments["allele"] == "0", fragments["chrom"] + "a", fragments["chrom"] + "b"))
+        elif type == "allelic_resolved_rev":
+            fragments = fragments.query("chrom.str.contains('chr')").query('allele != "."')
+            fragments = fragments.assign(chrom=np.where(fragments["allele"] == "1", fragments["chrom"] + "a", fragments["chrom"] + "b"))
         else:
             fragments = pd.concat([
                 fragments.assign(chrom=lambda x: x["chrom"] + "a"),
