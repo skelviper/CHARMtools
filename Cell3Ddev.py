@@ -287,7 +287,7 @@ class Cell3D:
 
         return feature_vec
     
-    def subset(self,genome_coord,query=None,in_place=False):
+    def subset(self,genome_coord="",query=None,in_place=False):
         """
         Subset the Cell3D object to a given genome coordinate.
 
@@ -545,7 +545,7 @@ class Cell3D:
         self.tdg["knn_density_"+str(k)] = np.array(densities)
         return None
 
-    def add_feature_in_radius(self, feature, radius,type = "mean",if_self = False,if_rank = False,add_self=True):
+    def add_feature_in_radius(self, feature, radius,type = "mean",if_self = True,if_rank = False,add_self=False):
         """
         Smooth given feature by averaging or summing over a sphere of given radius.
 
@@ -567,7 +567,8 @@ class Cell3D:
         from scipy.stats import rankdata
         indices_list = self.kdtree.query_ball_tree(self.kdtree, r=radius)
         if not if_self:
-            indices_list = [indices[1:] for indices in indices_list]
+            #indices_list = [indices[1:] for indices in indices_list]
+            raise ValueError("if_self parameter is not implemented yet")
         if type =="mean":
             avgs = [self.tdg[feature].iloc[indices].mean() for indices in indices_list]
         elif type =="sum":
