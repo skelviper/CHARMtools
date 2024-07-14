@@ -5,11 +5,13 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 import re
-from sklearn.preprocessing import LabelEncoder
 import pybedtools
 import os
 import tqdm
 import copy
+
+from sklearn.cluster import DBSCAN
+from sklearn.preprocessing import LabelEncoder
 
 def dev_only(func):
     import functools
@@ -727,6 +729,35 @@ class Cell3D:
         feature_mat[feature_vec,:] = 0
         feature_mat[:,feature_vec] = 0
         return feature_mat,feature_vec
+
+    def calc_3D_cluster(self, query="",eps=1.2,min_samples=5,cluster_name="cluster",type="normal",random_seed=42):
+        """
+        Clustering given points in 3D space using DBSCAN.
+        """
+        if self.on_disk:
+            self.to_memory()
+        if query != "":
+            data = self.tdg.query(query).copy()
+        else:
+            data = self.tdg.copy()
+        if type == "random":
+            data = self.tdg.sample(data.shape[0],random_state=random_seed).copy()
+
+        cluster = DBSCAN(eps=eps, min_samples=min_samples).fit(data[["x","y","z"]])
+
+        # if cluster_name already in data
+        if cluster_name in data.columns:
+            print(f"Warning: {cluster_name} already in data, remove the old one")
+            data.drop(columns=[cluster_name],inplace=True)
+
+        data.loc[:,cluster_name] = cluster.labels_
+        self.tdg = pd.concat([self.tdg,data.loc[:,cluster_name]],axis=1)
+        # cluster name column na to -1
+        self.tdg[cluster_name] = self.tdg[cluster_name].fillna(-1)
+        self.tdg[cluster_name] = self.tdg[cluster_name].astype(int).astype(str)
+        self.features.append(cluster_name)
+        return None
+
 
     # data visualize
     def write_cif(self,factor_b,outputpath = None):
