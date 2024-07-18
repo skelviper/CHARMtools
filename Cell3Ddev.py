@@ -351,6 +351,8 @@ class Cell3D:
         """
         FRIP = None
         fragments = pd.read_csv(path, sep="\t", header=None)
+        if fragments.shape[1] > 6:
+            fragments = fragments.iloc[:, :6]   
         fragments.columns = ["chrom", "start", "end", "allele", "score", "strand"][:len(fragments.columns)]
         if keep_3prime:
             fragments = fragments.assign(start=lambda x: np.where(x["strand"] == "+", x["end"] - 1, x["start"]))
@@ -748,7 +750,7 @@ class Cell3D:
         # if cluster_name already in data
         if cluster_name in data.columns:
             print(f"Warning: {cluster_name} already in data, remove the old one")
-            data.drop(columns=[cluster_name],inplace=True)
+            self.tdg.drop(columns=[cluster_name],inplace=True)
 
         data.loc[:,cluster_name] = cluster.labels_
         self.tdg = pd.concat([self.tdg,data.loc[:,cluster_name]],axis=1)
