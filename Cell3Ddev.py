@@ -780,7 +780,7 @@ class Cell3D:
         valid_clusters = data[data[feature] != "-1"][feature].unique()
 
         radius_list = []
-        for cluster in tqdm.tqdm(valid_clusters):
+        for cluster in valid_clusters:
             points = data[data[feature] == cluster][['x','y','z']].values
             center,radius_squared = get_bounding_ball(points)
             radius = np.sqrt(radius_squared)
