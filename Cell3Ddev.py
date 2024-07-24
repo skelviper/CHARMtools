@@ -40,6 +40,7 @@ class Cell3D:
         self.on_disk = on_disk
         self.on_disk_path = on_disk_path
         self.metadata = {}
+        self.extra = {}
 
         if on_disk:
             self.to_disk(on_disk_path)
@@ -468,7 +469,7 @@ class Cell3D:
         # merge positions and bedgraph
         positions_bed = pybedtools.BedTool.from_dataframe(positions)
         bedgraph_bed = pybedtools.BedTool.from_dataframe(bedgraph)
-        merged_bed = positions_bed.intersect(bedgraph_bed,wa=True,wb=True)
+        merged_bed = positions_bed.intersect(bedgraph_bed,wa=True,wb=True,nonamecheck=True)
         newcol = merged_bed.to_dataframe()[["chrom","start","end","thickStart"]].groupby(["chrom","start","end"]).sum().reset_index()
         newcol.columns = ["chrom","start","end",column_name]
         newcol["pos"] = newcol["start"]
@@ -760,6 +761,34 @@ class Cell3D:
         self.features.append(cluster_name)
         return None
 
+    def point_to_3Dcluster(self,feature,new_column_name):
+        """
+        For each cluster, calculate the bounding ball and assign points inside the ball to the cluster.
+        """
+        from miniball import get_bounding_ball
+
+        if self.on_disk:
+            self.to_memory()
+
+        data = self.tdg.copy()
+        if new_column_name in data.columns:
+            warnings.warn(f"Column {new_column_name} already exists, will be overwritten")
+        if feature not in data.columns:
+            raise ValueError(f"Feature {feature} not found in the data")
+        
+        data[new_column_name] = "-1"
+        valid_clusters = data[data[feature] != "-1"][feature].unique()
+
+        radius_list = []
+        for cluster in tqdm.tqdm(valid_clusters):
+            points = data[data[feature] == cluster][['x','y','z']].values
+            center,radius_squared = get_bounding_ball(points)
+            radius = np.sqrt(radius_squared)
+            data.loc[self.kdtree.query_ball_point(center, radius),new_column_name] = cluster
+            radius_list.append(radius)
+        self.extra[new_column_name + "_radius"] = radius_list
+        self.tdg = data
+        return None
 
     # data visualize
     def write_cif(self,factor_b,outputpath = None):
