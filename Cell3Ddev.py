@@ -487,7 +487,7 @@ class Cell3D:
     #     self.features.append("CpG")
     #     self.tdg = pd.merge(self.tdg, CpG, on=["chrom", "pos"], how="left")
         
-    def add_RNA_data(self, rnag1, rnag2, genes,cellname = None, column_name=None):
+    def add_RNA_data(self, rnag1, rnag2, genes,cellname = None, column_name=None,type="tss"):
         """
         Add RNA data to the Cell3D object.
 
@@ -507,30 +507,50 @@ class Cell3D:
 
         if cellname is None:
             cellname = self.cellname
+        if column_name is None:
+            column_name = "UMI"
 
         resolution = self.resolution
         genes = genes.copy()
-        genes.columns = ['chrom','start','end','id','gene','strand']
-        genes['tss'] = genes.apply(lambda x: x['start'] if x['strand'] == '+' else x['end'], axis=1)
-        genes['tss'] = genes['tss']//resolution*resolution
-        genes = genes[["chrom","tss","gene"]]
 
-        rnag1m = rnag1[['gene',cellname]]
-        rnag2m = rnag2[['gene',cellname]]
+        if type == "tss":
+            genes.columns = ['chrom','start','end','id','gene','strand']
+            genes['tss'] = genes.apply(lambda x: x['start'] if x['strand'] == '+' else x['end'], axis=1)
+            genes['tss'] = genes['tss']//resolution*resolution
+            genes = genes[["chrom","tss","gene"]]
 
-        rnag1m = rnag1m.merge(genes, left_on='gene', right_on='gene', how='left')[['chrom','tss',cellname]]
-        rnag2m = rnag2m.merge(genes, left_on='gene', right_on='gene', how='left')[['chrom','tss',cellname]]
-        rnag1m['chrom'] = rnag1m['chrom'].apply(lambda x: x + "b")
-        rnag2m['chrom'] = rnag2m['chrom'].apply(lambda x: x + "a")
+            rnag1m = rnag1[['gene',cellname]]
+            rnag2m = rnag2[['gene',cellname]]
 
-        if column_name is None:
-            column_name = "UMI"
-        mergedf = pd.concat([rnag1m,rnag2m])
-        mergedf.columns = ['chrom','pos',column_name]
-        mergedf = mergedf.groupby(['chrom','pos']).sum().reset_index()
+            rnag1m = rnag1m.merge(genes, left_on='gene', right_on='gene', how='left')[['chrom','tss',cellname]]
+            rnag2m = rnag2m.merge(genes, left_on='gene', right_on='gene', how='left')[['chrom','tss',cellname]]
+            rnag1m['chrom'] = rnag1m['chrom'].apply(lambda x: x + "b")
+            rnag2m['chrom'] = rnag2m['chrom'].apply(lambda x: x + "a")
 
-        df = pd.merge(self.tdg,mergedf,on=['chrom','pos'],how='left')
+            mergedf = pd.concat([rnag1m,rnag2m])
+            mergedf.columns = ['chrom','pos',column_name]
+            mergedf = mergedf.groupby(['chrom','pos']).sum().reset_index()
+
+            df = pd.merge(self.tdg,mergedf,on=['chrom','pos'],how='left')
+
+        if type == "gene":
+            # the gene options assume that gene table is already in binned foramt, you can use create_bins_genetable to create the binned gene table
+            df = self.tdg.copy()
+            rnag1m = rnag1[["gene",cellname]].copy()
+            rnag2m = rnag2[["gene",cellname]].copy()
+
+            rnag1m.columns = ["gene","UMIs"]
+            rnag2m.columns = ["gene","UMIs"]
+            rnag1m = genes[["chrom","start","end","gene"]].merge(rnag1m.query('UMIs > 0'),on="gene",how="inner").drop("gene",axis=1).groupby(["chrom","start","end"]).sum().reset_index()
+            rnag2m = genes[["chrom","start","end","gene"]].merge(rnag2m.query('UMIs > 0'),on="gene",how="inner").drop("gene",axis=1).groupby(["chrom","start","end"]).sum().reset_index()
+            
+            rnag1m['chrom'] = rnag1m['chrom'] + 'b'
+            rnag2m['chrom'] = rnag2m['chrom'] + 'a'
+            rna = pd.concat([rnag1m,rnag2m]).drop('end',axis=1)
+            rna.columns = ['chrom','pos',column_name]
+            df = df.merge(rna,on=["chrom","pos"],how="left")
         df[column_name] = df[column_name].fillna(0)
+
         self.tdg = df
         self.features.append(column_name)
         return None
@@ -1482,3 +1502,35 @@ def calc_volume(point_cloud,method="convexhull",alpha=0.2):
 
     else:
         raise ValueError("method should be alphashape or convexhull")
+
+def create_bins_genetable(df,resolution=5000):
+    # Prepare output columns
+    df = df.copy()
+    df['start'] = df['start'].astype(int) // resolution * resolution
+    df['end'] = df['end'].astype(int) // resolution * resolution + resolution
+    chroms, ids, names, strands, starts_all, ends_all = [], [], [], [], [], []
+
+    # Process each row
+    for _, row in df.iterrows():
+        starts = np.arange(row['start'], row['end'], resolution)
+        ends = np.clip(starts + resolution, None, row['end'])
+        
+        # Append results
+        chroms.extend([row['chrom']] * len(starts))
+        ids.extend([row['id']] * len(starts))
+        names.extend([row['gene']] * len(starts))
+        strands.extend([row['strand']] * len(starts))
+        starts_all.extend(starts)
+        ends_all.extend(ends)
+    
+    # Create a new DataFrame
+    new_df = pd.DataFrame({
+        'chrom': chroms,
+        'start': starts_all,
+        'end': ends_all,
+        'id': ids,
+        'gene': names,
+        'strand': strands
+    })
+
+    return new_df
