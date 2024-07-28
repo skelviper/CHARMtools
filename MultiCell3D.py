@@ -243,10 +243,16 @@ class MultiCell3D:
         """
         if cellnames is None:
             cellnames = self.cellnames
-        mats = []
-        for cell in tqdm.tqdm(self.get_cell(cellnames)):
-            mats.append(cell.calc_distance_matrix(genome_coord))
-        return np.nanmean(mats,axis=0)
+        # mats = []
+        # for cell in tqdm.tqdm(self.get_cell(cellnames)):
+        #     mats.append(cell.calc_distance_matrix(genome_coord))
+        # return np.nanmean(mats,axis=0)
+        def _compute_distance(cell):
+            return cell.calc_distance_matrix(genome_coord)
+        with concurrent.futures.ProcessPoolExecutor(10) as executor:
+            results = list(tqdm.tqdm(executor.map(_compute_distance, [self.get_cell(cellname) for cellname in cellnames]), total=len(cellnames)))
+        
+        return np.nanmean(results, axis=0)
 
     def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None):
         """
@@ -255,11 +261,15 @@ class MultiCell3D:
         """
         if cellnames is None:
             cellnames = self.cellnames
-        mats = []
-        for cell in tqdm.tqdm(self.get_cell(cellnames)):
-            distance_matrix = cell.calc_distance_matrix(genome_coord)
-            mats.append(np.where(np.isnan(distance_matrix), np.nan, distance_matrix <= distance_threshold))
-        return np.nanmean(mats, axis=0)
+        # mats = []
+        # for cell in tqdm.tqdm(self.get_cell(cellnames)):
+        #     distance_matrix = cell.calc_distance_matrix(genome_coord)
+        #     mats.append(np.where(np.isnan(distance_matrix), np.nan, distance_matrix <= distance_threshold))
+        def _compute_proximity(cell):
+            return np.where(np.isnan(cell.calc_distance_matrix(genome_coord)), np.nan, cell.calc_distance_matrix(genome_coord) <= distance_threshold)
+        with concurrent.futures.ProcessPoolExecutor(10) as executor:
+            results = list(tqdm.tqdm(executor.map(_compute_proximity, [self.get_cell(cellname) for cellname in cellnames]), total=len(cellnames)))
+        return np.nanmean(results, axis=0)
     
 
     def calc_feature_matrix(self, genome_coord,feature, cells=None):
@@ -379,4 +389,5 @@ class MultiCell3D:
         """
         Calculate 
         """
+        pass
         

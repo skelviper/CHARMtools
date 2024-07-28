@@ -35,7 +35,8 @@ class Cell3D:
         self.record_size = len(self.tdg)
         self.resolution = resolution
         self.features = []
-        self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
+        #self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
+        self.kdtree = None
         self.chrom_length = None
         self.on_disk = on_disk
         self.on_disk_path = on_disk_path
@@ -48,6 +49,11 @@ class Cell3D:
     def __repr__(self):
         self.get_info()
         return ""
+    
+    def build_kdtree():
+        if self.on_disk == False:
+            self.to_memory()
+        self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
     
     # Construct a Cell3D object
     @dev_only
@@ -168,8 +174,12 @@ class Cell3D:
         # create path if folder does not exist
         if not os.path.exists(os.path.dirname(self.on_disk_path)):
             os.makedirs(os.path.dirname(self.on_disk_path))
+        # remove the file if it already exists
+        if os.path.exists(self.on_disk_path):
+            os.remove(self.on_disk_path)
         with pd.HDFStore(self.on_disk_path) as diskfile:
             diskfile.put("tdg", self.tdg,format="table",data_columns=True)
+
         self.tdg = None
     
     def to_memory(self):
@@ -303,7 +313,6 @@ class Cell3D:
                 self.tdg = self.get_data(genome_coord).query(query).reset_index(drop=True)
             else:
                 self.tdg = self.get_data(genome_coord).reset_index(drop=True)
-            self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
             self.record_size = len(self.tdg)
             return None
         else:
@@ -314,7 +323,6 @@ class Cell3D:
             else:
                 new_cell.tdg = new_cell.get_data(genome_coord).reset_index(drop=True)
 
-            new_cell.kdtree = cKDTree(new_cell.tdg[["x", "y", "z"]].values)
             new_cell.record_size = len(new_cell.tdg)
             return new_cell
 
@@ -561,6 +569,9 @@ class Cell3D:
         """
         if self.on_disk:
             self.to_memory()
+        if self.kdtree is None:
+            self.build_kdtree()
+
         self.features.append("knn_density_"+str(k))
         densities = []
         for point in self.tdg[["x","y","z"]].values:
@@ -589,6 +600,8 @@ class Cell3D:
         """
         if self.on_disk:
             self.to_memory()
+        if self.kdtree is None:
+            self.build_kdtree()
         from scipy.stats import rankdata
         indices_list = self.kdtree.query_ball_tree(self.kdtree, r=radius)
         if not if_self:
@@ -626,6 +639,8 @@ class Cell3D:
         """
         if self.on_disk:
             self.to_memory()
+        if self.kdtree is None:
+            self.build_kdtree()
         indices_list = self.kdtree.query_ball_tree(self.kdtree, r=radius)
         intermingling_ratios = []
         intermingling_indexes = []
@@ -789,6 +804,8 @@ class Cell3D:
 
         if self.on_disk:
             self.to_memory()
+        if self.kdtree is None:
+            self.build_kdtree()
 
         data = self.tdg.copy()
         if new_column_name in data.columns:
