@@ -178,14 +178,13 @@ class Cell3D:
         if os.path.exists(self.on_disk_path):
             os.remove(self.on_disk_path)
         with pd.HDFStore(self.on_disk_path) as diskfile:
-            diskfile.put("tdg", self.tdg,format="table",data_columns=True)
+            diskfile.put("tdg", self.tdg.set_index(['chrom','pos']).sort_index(),format="table",data_columns=True)
 
         self.tdg = None
     
     def to_memory(self):
         if self.on_disk:
-            with pd.HDFStore(self.on_disk_path) as diskfile:
-                self.tdg = diskfile["tdg"].copy()
+            self.tdg = pd.read_hdf(self.on_disk_path, 'tdg').reset_index().copy()
             self.on_disk = False
         else:
             warnings.warn("Object is already in memory")
@@ -201,7 +200,7 @@ class Cell3D:
         for key, value in self.metadata.items():
             print(f"  {key}: {value}") 
 
-    def get_data(self,genome_coord = "",slice=False,random_slice=False,slice_width = 3,rotate=False,
+    def get_data(self,genome_coord = "",if_slice=False,random_slice=False,slice_width = 3,rotate=False,
                  rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
         """
         Get the data of the Cell3D object.
@@ -209,7 +208,7 @@ class Cell3D:
         Parameters:
             query: str
                 Query string to filter the data
-            slice: bool
+            if_slice: bool
                 Whether to slice the data
             random_slice: bool
                 Whether to slice randomly
@@ -226,8 +225,8 @@ class Cell3D:
             chrom,start,end = _auto_genome_coord(genome_coord)
             if start is None:
                 if self.on_disk:
-                    with pd.HDFStore(self.on_disk_path) as diskfile:
-                        tdg_temp = diskfile["tdg"].query("chrom == @chrom").copy()
+                    conditions = f"(chrom == {chrom})"
+                    tdg_temp = pd.read_hdf(self.on_disk_path, 'tdg', where=conditions).reset_index().copy()
                 else:
                     tdg_temp = self.tdg.query("chrom == @chrom").copy()
             else:
@@ -235,14 +234,13 @@ class Cell3D:
                 end = int((end - 1) // self.resolution * self.resolution + self.resolution)
                 
                 if self.on_disk:
-                    with pd.HDFStore(self.on_disk_path) as diskfile:
-                        tdg_temp = diskfile["tdg"].query("chrom == @chrom & pos >= @start & pos < @end").copy()
+                    conditions = f"(chrom == {chrom}) & (pos >= {start}) & (pos < {end})"
+                    tdg_temp = pd.read_hdf(self.on_disk_path, 'tdg', where=conditions).reset_index().copy()
                 else:
-                    tdg_temp = self.tdg.query("chrom == @chrom & pos >= @start & pos < @end").copy()
+                    tdg_temp = self.tdg.query("chrom == @chrom & pos >= @start & pos <= @end").copy()
         else:
             if self.on_disk:
-                with pd.HDFStore(self.on_disk_path) as diskfile:
-                    tdg_temp = diskfile["tdg"].copy()
+                tdg_temp = pd.read_hdf(self.on_disk_path, 'tdg').copy()
             else:
                 tdg_temp = self.tdg.copy()
         if rotate:
@@ -253,7 +251,7 @@ class Cell3D:
                                         )
             tdg_temp = tdg_temp.assign(x=rotated[:,0],y=rotated[:,1],z=rotated[:,2])
 
-        if slice:
+        if if_slice:
             if random_slice:
                 xrange = (tdg_temp["x"].min(),tdg_temp["x"].max())
                 slice_upper = np.random.uniform(xrange[0]+slice_width,xrange[1])
@@ -270,7 +268,7 @@ class Cell3D:
         INPUT:
             genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end. \|
                         whole chromosome is also acceptable. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a"
-            column_name: str, the name of the column to extract the feature vector from.
+            column_name: str, the name of the column to extract the feature vector from. Or list of str.
         OUTPUT:
             feature_vec: np.array of the feature vector for the given region.
         """
@@ -290,15 +288,26 @@ class Cell3D:
 
         reconstruct_df["pos"] = reconstruct_df["pos"] // self.resolution
 
-        # Extract the feature vector from the specified column
-        if column_name not in reconstruct_df.columns:
-            raise ValueError(f"Column '{column_name}' not found in the data")
+        if isinstance(column_name, str):
+            if column_name not in reconstruct_df.columns:
+                raise ValueError(f"Column '{column_name}' not found in the data")
+            feature_vec = reconstruct_df[column_name].values
+            for pos, value in zip(reconstruct_df["pos"], reconstruct_df[column_name]):
+                feature_vec[pos] = value
+            return feature_vec
 
-        feature_vec = np.full(matsize, np.nan)
-        for pos, value in zip(reconstruct_df["pos"], reconstruct_df[column_name]):
-            feature_vec[pos] = value
+        elif isinstance(column_name, list):
+            for i in column_name:
+                if i not in reconstruct_df.columns:
+                    raise ValueError(f"Column '{i}' not found in the data")
 
-        return feature_vec
+            feature_vec = np.full((len(column_name), matsize), np.nan)
+            for pos, values in zip(reconstruct_df["pos"], reconstruct_df[column_name].values):
+                feature_vec[:, pos] = values
+            return feature_vec
+        else:
+            raise ValueError("column_name should be a string or a list of strings")
+
     
     def subset(self,genome_coord="",query=None,in_place=False):
         """

@@ -220,6 +220,9 @@ class MultiCell3D:
         """
         if isinstance(cellnames, str):
             return self.cells_dict[cellnames]
+        # elif is list or ndarray
+        elif isinstance(cellnames, np.ndarray):
+            return [self.cells_dict[cellname] for cellname in cellnames]
         elif isinstance(cellnames, list):
             return [self.cells_dict[cellname] for cellname in cellnames]
         else:
@@ -235,23 +238,16 @@ class MultiCell3D:
         for key in self.matrices.keys():
             obj.matrices[key] = self.matrices[key].loc[:,cellnames]
         return obj
-    
-    def calc_distance_matrix(self,genome_coord,cellnames=None):
+
+    def calc_distance_matrix(self, genome_coord, cellnames=None):
         """
         Calculate the distance matrix between cells for a given genomic coordinate.
-        if cells is None, all cells will be used.
+        If cellnames is None, all cells will be used.
         """
         if cellnames is None:
             cellnames = self.cellnames
-        # mats = []
-        # for cell in tqdm.tqdm(self.get_cell(cellnames)):
-        #     mats.append(cell.calc_distance_matrix(genome_coord))
-        # return np.nanmean(mats,axis=0)
-        def _compute_distance(cell):
-            return cell.calc_distance_matrix(genome_coord)
-        with concurrent.futures.ProcessPoolExecutor(10) as executor:
-            results = list(tqdm.tqdm(executor.map(_compute_distance, [self.get_cell(cellname) for cellname in cellnames]), total=len(cellnames)))
-        
+
+        results = [cell.calc_distance_matrix(genome_coord) for cell in tqdm.tqdm(self.get_cell(cellnames))]
         return np.nanmean(results, axis=0)
 
     def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None):
@@ -261,16 +257,12 @@ class MultiCell3D:
         """
         if cellnames is None:
             cellnames = self.cellnames
-        # mats = []
-        # for cell in tqdm.tqdm(self.get_cell(cellnames)):
-        #     distance_matrix = cell.calc_distance_matrix(genome_coord)
-        #     mats.append(np.where(np.isnan(distance_matrix), np.nan, distance_matrix <= distance_threshold))
-        def _compute_proximity(cell):
-            return np.where(np.isnan(cell.calc_distance_matrix(genome_coord)), np.nan, cell.calc_distance_matrix(genome_coord) <= distance_threshold)
-        with concurrent.futures.ProcessPoolExecutor(10) as executor:
-            results = list(tqdm.tqdm(executor.map(_compute_proximity, [self.get_cell(cellname) for cellname in cellnames]), total=len(cellnames)))
+        
+#        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+#            results = list(tqdm.tqdm(executor.map(self._process_cell_calc_3dproximity_matrix, self.get_cell(cellnames), [genome_coord]*len(cellnames), [distance_threshold]*len(cellnames)), total=len(cellnames)))
+        results = [cell.calc_distance_matrix(genome_coord) < distance_threshold for cell in tqdm.tqdm(self.get_cell(cellnames))]
         return np.nanmean(results, axis=0)
-    
+
 
     def calc_feature_matrix(self, genome_coord,feature, cells=None):
         """
@@ -326,6 +318,18 @@ class MultiCell3D:
         mat.columns = self.cellnames
         self.matrices[key] = mat
         return None
+
+    def get_feature_vec(self,genome_coord,column_name,cellnames=None,combine=True):
+        """
+        Get the feature vector for a given genomic coordinate.
+        """
+        if cellnames is None:
+            cellnames = self.cellnames
+        results = [cell.get_feature_vec(genome_coord,column_name) for cell in tqdm.tqdm(self.get_cell(cellnames))]
+        if combine:
+            return np.nanmean(np.array(results), axis=0)
+        else:
+            return np.array(results)
 
     def FindMarkers(self, matrix_key,cellnames_group1, cellnames_group2, method = "manwhitneyu"):
         """
@@ -390,4 +394,3 @@ class MultiCell3D:
         Calculate 
         """
         pass
-        
