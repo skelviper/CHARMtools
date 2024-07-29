@@ -239,29 +239,45 @@ class MultiCell3D:
             obj.matrices[key] = self.matrices[key].loc[:,cellnames]
         return obj
 
-    def calc_distance_matrix(self, genome_coord, cellnames=None):
+    def calc_distance_matrix(self, genome_coord, cellnames=None,allele=True,combine=True):
         """
         Calculate the distance matrix between cells for a given genomic coordinate.
         If cellnames is None, all cells will be used.
         """
         if cellnames is None:
             cellnames = self.cellnames
+        if allele:
+            results = [cell.calc_distance_matrix(genome_coord)  for cell in tqdm.tqdm(self.get_cell(cellnames))]
+        else:
+            results = []
+            for cell in tqdm.tqdm(self.get_cell(cellnames)):
+                results.append(cell.calc_distance_matrix(genome_coord.replace(":","a:")))
+                results.append(cell.calc_distance_matrix(genome_coord.replace(":","b:")) )
+        if combine:
+            return np.nanmean(results, axis=0)
+        else:
+            return np.array(results)
 
-        results = [cell.calc_distance_matrix(genome_coord) for cell in tqdm.tqdm(self.get_cell(cellnames))]
-        return np.nanmean(results, axis=0)
 
-    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None):
+    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None,allele=True,combine=True):
         """
         Calculate the 3D proximity matrix between cells.
         if cells is None, all cells will be used.
         """
         if cellnames is None:
             cellnames = self.cellnames
-        
-#        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
-#            results = list(tqdm.tqdm(executor.map(self._process_cell_calc_3dproximity_matrix, self.get_cell(cellnames), [genome_coord]*len(cellnames), [distance_threshold]*len(cellnames)), total=len(cellnames)))
-        results = [cell.calc_distance_matrix(genome_coord) < distance_threshold for cell in tqdm.tqdm(self.get_cell(cellnames))]
-        return np.nanmean(results, axis=0)
+
+        if allele:
+            results = [cell.calc_distance_matrix(genome_coord) < distance_threshold for cell in tqdm.tqdm(self.get_cell(cellnames))]
+        else:
+            results = []
+            for cell in tqdm.tqdm(self.get_cell(cellnames)):
+                results.append(cell.calc_distance_matrix(genome_coord.replace(":","a:")) < distance_threshold)
+                results.append(cell.calc_distance_matrix(genome_coord.replace(":","b:")) < distance_threshold)
+        if combine:
+            return np.nanmean(results, axis=0)
+        else:
+            return np.array(results)
 
 
     def calc_feature_matrix(self, genome_coord,feature, cells=None):
@@ -319,13 +335,21 @@ class MultiCell3D:
         self.matrices[key] = mat
         return None
 
-    def get_feature_vec(self,genome_coord,column_name,cellnames=None,combine=True):
+    def get_feature_vec(self,genome_coord,column_name,cellnames=None,combine=True,allele=True):
         """
         Get the feature vector for a given genomic coordinate.
         """
         if cellnames is None:
             cellnames = self.cellnames
-        results = [cell.get_feature_vec(genome_coord,column_name) for cell in tqdm.tqdm(self.get_cell(cellnames))]
+        if allele:
+            results = [cell.get_feature_vec(genome_coord,column_name) for cell in tqdm.tqdm(self.get_cell(cellnames))]
+        else:
+            genome_coorda = genome_coord.replace(":","a:")
+            genome_coordb = genome_coord.replace(":","b:")
+            results = []
+            for cell in tqdm.tqdm(self.get_cell(cellnames)):
+                results.append(cell.get_feature_vec(genome_coorda,column_name))
+                results.append(cell.get_feature_vec(genome_coordb,column_name))
         if combine:
             return np.nanmean(np.array(results), axis=0)
         else:
