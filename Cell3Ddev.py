@@ -50,8 +50,8 @@ class Cell3D:
         self.get_info()
         return ""
     
-    def build_kdtree():
-        if self.on_disk == False:
+    def build_kdtree(self):
+        if self.on_disk:
             self.to_memory()
         self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
     
@@ -169,7 +169,8 @@ class Cell3D:
             warnings.warn("No path provided, saving to default path ./")
         elif on_disk_path != None:
             self.on_disk_path = on_disk_path + "/" + f"{self.cellname}.h5"
-
+        if self.kdtree is not None:
+            self.kdtree = None
         self.on_disk = True
         # create path if folder does not exist
         if not os.path.exists(os.path.dirname(self.on_disk_path)):
@@ -200,7 +201,19 @@ class Cell3D:
         for key, value in self.metadata.items():
             print(f"  {key}: {value}") 
 
-    def get_data(self,genome_coord = "",if_slice=False,random_slice=False,slice_width = 3,rotate=False,
+    def _sparse_to_dense(self,genome_coord,sparse_df):
+        chrom,start,end = _auto_genome_coord(genome_coord)
+        positions = np.arange(start,end,self.resolution)
+        dense_df = pd.DataFrame(positions,columns=['pos'])
+        sparse_df['pos'] = sparse_df['pos'].astype(int)
+        dense_df = pd.merge(dense_df, sparse_df, on='pos', how='left')
+        dense_df['chrom'] = chrom
+
+        columns_order = ['chrom', 'pos'] + [col for col in dense_df.columns if col not in ['chrom', 'pos']]
+        dense_df = dense_df[columns_order]
+        return dense_df
+
+    def get_data(self,genome_coord = "",if_dense=False,if_slice=False,random_slice=False,slice_width = 3,rotate=False,
                  rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
         """
         Get the data of the Cell3D object.
@@ -237,10 +250,10 @@ class Cell3D:
                     conditions = f"(chrom == {chrom}) & (pos >= {start}) & (pos < {end})"
                     tdg_temp = pd.read_hdf(self.on_disk_path, 'tdg', where=conditions).reset_index().copy()
                 else:
-                    tdg_temp = self.tdg.query("chrom == @chrom & pos >= @start & pos <= @end").copy()
+                    tdg_temp = self.tdg.query("chrom == @chrom & pos >= @start & pos < @end").copy()
         else:
             if self.on_disk:
-                tdg_temp = pd.read_hdf(self.on_disk_path, 'tdg').copy()
+                tdg_temp = pd.read_hdf(self.on_disk_path, 'tdg').reset_index().copy()
             else:
                 tdg_temp = self.tdg.copy()
         if rotate:
@@ -260,6 +273,11 @@ class Cell3D:
             else:
                 slice_width = slice_width / 2 
                 tdg_temp = tdg_temp.query("x > -@slice_width & x < @slice_width")
+
+        if if_dense:
+            if genome_coord == "":
+                raise ValueError("genome_coord should be provided to convert sparse data to dense data")
+            tdg_temp = self._sparse_to_dense(genome_coord,tdg_temp)
 
         return tdg_temp
     
@@ -472,7 +490,6 @@ class Cell3D:
             bedgraph = bedgraph.query("chrom.str.contains('chr')").query('allele != "."')
             bedgraph = bedgraph.assign(chrom=np.where(bedgraph["allele"] == 0, bedgraph["chrom"] + "a", bedgraph["chrom"] + "b"))
             bedgraph = bedgraph[["chrom","start","end",column_name]]
-            #print(bedgraph.query('chrom.str.contains("b") & RNA > 0'))
 
         else: 
             bedgraph = pd.read_csv(path,sep="\t",header=None)
@@ -495,14 +512,6 @@ class Cell3D:
         temp[column_name] = temp[column_name].fillna(0)
         self.tdg = temp
         self.features.append(column_name)
-
-    # def add_CpG_data(self, path):
-    #     if self.on_disk:
-    #         self.to_memory()
-
-    #     CpG = Cell3D._load_CpG(path)
-    #     self.features.append("CpG")
-    #     self.tdg = pd.merge(self.tdg, CpG, on=["chrom", "pos"], how="left")
         
     def add_RNA_data(self, rnag1, rnag2, genes,cellname = None, column_name=None,type="tss"):
         """
