@@ -9,6 +9,7 @@ import pybedtools
 import warnings
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
+from functools import partial
 
 def dev_only(func):
     import functools
@@ -246,34 +247,35 @@ class MultiCell3D:
         """
         if cellnames is None:
             cellnames = self.cellnames
+        temp_cells = self.get_cell(cellnames)
         if allele:
-            results = [cell.calc_distance_matrix(genome_coord)  for cell in tqdm.tqdm(self.get_cell(cellnames))]
+            with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+                results = list(tqdm.tqdm(executor.map(partial(_calc_distance,genome_coord=genome_coord), temp_cells), total=len(temp_cells)))
         else:
-            results = []
-            for cell in tqdm.tqdm(self.get_cell(cellnames)):
-                results.append(cell.calc_distance_matrix(genome_coord.replace(":","a:")))
-                results.append(cell.calc_distance_matrix(genome_coord.replace(":","b:")) )
+            with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+                results1 = list(tqdm.tqdm(executor.map(partial(_calc_distance,genome_coord=genome_coord.replace(":","a:")), temp_cells), total=len(temp_cells)))
+                results2 = list(tqdm.tqdm(executor.map(partial(_calc_distance,genome_coord=genome_coord.replace(":","b:")), temp_cells), total=len(temp_cells)))
+            results = results1 + results2
         if combine:
             return np.nanmean(results, axis=0)
         else:
             return np.array(results)
+            
 
 
-    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None,allele=True,combine=True):
-        """
-        Calculate the 3D proximity matrix between cells.
-        if cells is None, all cells will be used.
-        """
+    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None, allele=True, combine=True, nproc=20):
         if cellnames is None:
             cellnames = self.cellnames
+        temp_cells = self.get_cell(cellnames)
 
         if allele:
-            results = [cell.calc_distance_matrix(genome_coord) < distance_threshold for cell in tqdm.tqdm(self.get_cell(cellnames))]
+            with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+                results = list(tqdm.tqdm(executor.map(partial(_calc_proximity,genome_coord=genome_coord,distance_threshold=distance_threshold), temp_cells), total=len(temp_cells)))
         else:
-            results = []
-            for cell in tqdm.tqdm(self.get_cell(cellnames)):
-                results.append(cell.calc_distance_matrix(genome_coord.replace(":","a:")) < distance_threshold)
-                results.append(cell.calc_distance_matrix(genome_coord.replace(":","b:")) < distance_threshold)
+            with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+                results1 = list(tqdm.tqdm(executor.map(partial(_calc_proximity,genome_coord=genome_coord.replace(":","a:"),distance_threshold=distance_threshold), temp_cells), total=len(temp_cells)))
+                results2 = list(tqdm.tqdm(executor.map(partial(_calc_proximity,genome_coord=genome_coord.replace(":","b:"),distance_threshold=distance_threshold), temp_cells), total=len(temp_cells)))
+            results = results1 + results2
         if combine:
             return np.nanmean(results, axis=0)
         else:
@@ -418,3 +420,12 @@ class MultiCell3D:
         Calculate 
         """
         pass
+
+
+# helper functions
+def _calc_proximity(cell,genome_coord,distance_threshold):
+    mat = cell.calc_distance_matrix(genome_coord) < distance_threshold
+    return mat
+def _calc_distance(cell,genome_coord):
+    mat = cell.calc_distance_matrix(genome_coord)
+    return mat

@@ -4,6 +4,7 @@ import warnings
 import pandas as pd
 import numpy as np
 from scipy import stats
+import scipy
 import re
 import pybedtools
 import os
@@ -693,39 +694,22 @@ class Cell3D:
         self.chrom_length = chrom_length
 
     # Functions for output sub-region matrix
+    
     def calc_distance_matrix(self,genome_coord):
         """
+        Calculate the distance matrix of a given region.
         INPUT:
             genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end. \|
                           whole chromosome is also acceptable. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a
         OUTPUT:
             distance_matrix: symettrical distance matrix of the given region, np.array of shape (n,n)
         """
-        chrom,start,end = _auto_genome_coord(genome_coord)
+        temp_df = self.get_data(genome_coord,if_dense=True)
+        mat = scipy.spatial.distance.squareform(
+            scipy.spatial.distance.pdist(temp_df[["x","y","z"]].values)
+        )
+        return mat
 
-        if start is None and self.chrom_length is None:
-            raise ValueError("Running whole chromosome calculation with chrom_length is not available, |\
-                                please run add_chrom_length first")
-        
-        if start is None:        
-            matsize = self.chrom_length.query("chrom == @chrom")["size"].values[0] // self.resolution + 1
-            reconstruct_df = self.get_data(genome_coord)
-        else:
-            matsize = (end - start - 1) // self.resolution + 1
-            reconstruct_df = self.get_data(genome_coord)
-            reconstruct_df["pos"] = reconstruct_df["pos"] - start
-
-        reconstruct_df["pos"] = reconstruct_df["pos"] // self.resolution
-        coordinates = reconstruct_df.iloc[:, 2:5].values
-        diff = coordinates[:, np.newaxis, :] - coordinates[np.newaxis, :, :]
-        dist_matrix_reconstruct = np.linalg.norm(diff, axis=-1)
-        full_dist_matrix = np.full((matsize, matsize), np.nan)
-        for i, pos_i in enumerate(reconstruct_df['pos']):
-            for j, pos_j in enumerate(reconstruct_df['pos']):
-                full_dist_matrix[pos_i, pos_j] = dist_matrix_reconstruct[i, j]
-    
-        return full_dist_matrix
-    
     def calc_feature_matrix(self,genome_coord,feature):
         """
 
