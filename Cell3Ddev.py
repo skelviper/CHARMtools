@@ -829,6 +829,29 @@ class Cell3D:
         self.tdg = data
         return None
 
+
+    def calc_scABC_pred_gene(self,tss_genome_coord,flank = 2000000,expression_key = "UMIs_tss",
+                             activity_keys = ["atac_sum_in_radius_2","ct_sum_in_radius_2"],distance_type="3d"):
+        """
+        Calculate the predicted gene expression by scABC model.
+        """
+        resolution = self.resolution
+        chrom,start,end = _auto_genome_coord(tss_genome_coord)
+        region = f"{chrom}:{start-flank}-{end+flank}"
+        temp_tdg = self.get_data(region,if_dense=True)
+        tss_row = temp_tdg.loc[flank//resolution,:]
+        temp_tdg["activity"] = temp_tdg[activity_keys].prod(axis=1)
+        tss_location = tss_row[['x','y','z']].values
+
+        if distance_type == "3d":
+            temp_tdg["distance"] = np.sqrt((temp_tdg['x'] - tss_location[0])**2 + (temp_tdg['y'] - tss_location[1])**2 + (temp_tdg['z'] - tss_location[2])**2)
+        elif distance_type == "2d":
+            temp_tdg["distance"] = np.abs(temp_tdg['pos'] - tss_row['pos'])
+        temp_tdg['abc'] = temp_tdg['activity'] * (1/temp_tdg['distance']) 
+
+        return tss_row[expression_key], temp_tdg.abc.values
+    
+
     # data visualize
     def write_cif(self,factor_b,outputpath = None):
         """

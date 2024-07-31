@@ -10,6 +10,7 @@ import warnings
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
 from functools import partial
+import re
 
 def dev_only(func):
     import functools
@@ -281,6 +282,64 @@ class MultiCell3D:
         else:
             return np.array(results)
 
+    def calc_scABC_pred_gene(self,tss_genome_coord,flank=2000000,expression_key="UMIs_tss",distance_type = "3d",
+                             activity_keys=["atac_sum_in_radius_2","ct_sum_in_radius_2"],cellnames=None,nproc=20,allele=True):
+        """
+        """
+        if cellnames is None:   
+            cellnames = self.cellnames
+        temp_cells = self.get_cell(cellnames)
+
+        if allele:
+            with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+                results = list(tqdm.tqdm(executor.map(partial(_calc_scABC_pred_gene,
+                    tss_genome_coord=tss_genome_coord,
+                    flank=flank,
+                    expression_key=expression_key,
+                    distance_type=distance_type,
+                    activity_keys=activity_keys),temp_cells), 
+                total=len(temp_cells)))
+            expressions = np.array([result[0] for result in results])
+            abc = np.array([result[1] for result in results])
+        
+        else:
+            with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+                results1 = list(tqdm.tqdm(executor.map(partial(_calc_scABC_pred_gene,
+                    tss_genome_coord=tss_genome_coord.replace(":","a:"),
+                    flank=flank,
+                    expression_key=expression_key,
+                    distance_type=distance_type,
+                    activity_keys=activity_keys),temp_cells), 
+                total=len(temp_cells)))
+                results2 = list(tqdm.tqdm(executor.map(partial(_calc_scABC_pred_gene,
+                    tss_genome_coord=tss_genome_coord.replace(":","b:"),
+                    flank=flank,
+                    expression_key=expression_key,
+                    distance_type=distance_type,
+                    activity_keys=activity_keys),temp_cells), 
+                total=len(temp_cells)))
+            results = results1 + results2
+            expressions = np.array([result[0] for result in results])
+            abc = np.array([result[1] for result in results])
+
+        cors = []
+        pvs = []
+
+        for i in range(abc.shape[1]):
+            cor = stats.spearmanr(expressions,abc[:,i],nan_policy='omit')
+            cors.append(cor[0])
+            pvs.append(cor[1])
+
+        df = pd.DataFrame({"cor":cors,"p_value":pvs})
+        chrom,start,end = _auto_genome_coord(tss_genome_coord)
+
+        start = start - flank
+        end = end + flank
+        df["chrom"] = tss_genome_coord.split(":")[0]
+        df["pos"] = np.arange(start,end,temp_cells[0].resolution)
+        return df[["chrom","pos","cor","p_value"]]
+
+
 
     def calc_feature_matrix(self, genome_coord,feature, cells=None):
         """
@@ -429,3 +488,31 @@ def _calc_proximity(cell,genome_coord,distance_threshold):
 def _calc_distance(cell,genome_coord):
     mat = cell.calc_distance_matrix(genome_coord)
     return mat
+def _calc_scABC_pred_gene(cell,tss_genome_coord,flank,expression_key,activity_keys,distance_type):
+    expression,abc = cell.calc_scABC_pred_gene(tss_genome_coord,flank,expression_key,activity_keys,distance_type)
+    return [expression,abc]
+
+
+def _auto_genome_coord(genome_coord):
+    """
+    Automatically convert genome_coord to chrom,start,end format
+    INPUT:
+
+    OUTPUT:
+    """
+    # determine the genome_coord format
+    if isinstance(genome_coord,str):
+        if ":" in genome_coord:
+            chrom,start,end = re.split(":|-",genome_coord)
+            start,end = int(start),int(end)
+            mat_type = "region"
+        else:
+            chrom,start,end = genome_coord,None,None
+            mat_type = "chrom"
+    elif isinstance(genome_coord,(list,tuple)):
+        chrom,start,end = genome_coord
+        mat_type = "region"
+    else:
+        raise ValueError('Genome_coord should be str or list/tuple. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a"')
+    
+    return chrom,start,end
