@@ -283,7 +283,7 @@ class MultiCell3D:
             return np.array(results)
 
     def calc_scABC_pred_gene(self,tss_genome_coord,flank=2000000,expression_key="UMIs_tss",distance_type = "3d",
-                             activity_keys=["atac_sum_in_radius_2","ct_sum_in_radius_2"],cellnames=None,nproc=20,allele=True):
+                             activity_keys=["atac_sum_in_radius_2","ct_sum_in_radius_2"],cellnames=None,nproc=20,allele=True,return_data = False):
         """
         """
         if cellnames is None:   
@@ -337,7 +337,10 @@ class MultiCell3D:
         end = end + flank
         df["chrom"] = tss_genome_coord.split(":")[0]
         df["pos"] = np.arange(start,end,temp_cells[0].resolution)
-        return df[["chrom","pos","cor","p_value"]]
+        if return_data:
+            return df[["chrom","pos","cor","p_value"]],expressions,abc
+        else:
+            return df[["chrom","pos","cor","p_value"]]
 
 
 
