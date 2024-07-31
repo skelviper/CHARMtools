@@ -241,7 +241,7 @@ class MultiCell3D:
             obj.matrices[key] = self.matrices[key].loc[:,cellnames]
         return obj
 
-    def calc_distance_matrix(self, genome_coord, cellnames=None,allele=True,combine=True):
+    def calc_distance_matrix(self, genome_coord, cellnames=None,allele=True,combine=True,nproc=20):
         """
         Calculate the distance matrix between cells for a given genomic coordinate.
         If cellnames is None, all cells will be used.
