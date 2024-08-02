@@ -9,7 +9,6 @@ import pybedtools
 import warnings
 from scipy import stats
 from statsmodels.stats.multitest import multipletests
-from functools import partial
 import re
 
 def dev_only(func):
@@ -229,6 +228,31 @@ class MultiCell3D:
             return [self.cells_dict[cellname] for cellname in cellnames]
         else:
             raise ValueError("cellnames should be a list or a string.")
+
+    def get_data(self,nproc=20,cellnames=None,**kwargs):
+        """
+        Get the data for a given cellname or list of cellnames.
+        Params:
+            cellnames: list of cellnames
+            nproc: number of processes to use
+            **kwargs: additional arguments for Cell3D.get_data
+        Return:
+            list of dataframe
+        """
+        if cellnames is None:
+            cellnames = self.cellnames
+        temp_cells = self.get_cell(cellnames)
+
+        with concurrent.futures.ProcessPoolExecutor(20) as executor:
+            results = list(tqdm.tqdm(
+                            executor.map(
+                                partial(_get_data,**kwargs),
+                                [cell for cell in temp_cells]
+                            ),
+                        total=len(cellnames)
+                    )
+                )
+        return results
         
     def subset(self,cellnames):
         """
@@ -494,6 +518,10 @@ def _calc_distance(cell,genome_coord):
 def _calc_scABC_pred_gene(cell,tss_genome_coord,flank,expression_key,activity_keys,distance_type):
     expression,abc = cell.calc_scABC_pred_gene(tss_genome_coord,flank,expression_key,activity_keys,distance_type)
     return [expression,abc]
+def _get_data(cell,**kwargs):
+    df = cell.get_data(**kwargs)
+    df["cellname"] = cell.cellname
+    return df
 
 
 def _auto_genome_coord(genome_coord):
