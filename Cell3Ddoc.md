@@ -1,5 +1,7 @@
 # Cell3D class documentation
 
+## Cell 3D
+
 ### Overview
 The `Cell3D` class is intended for handling and analyzing three-dimensional cellular data. 
 
@@ -50,3 +52,6 @@ The `Cell3D` class is intended for handling and analyzing three-dimensional cell
 
 - **Method: `calc_distance_matrix`**
   - Description: This method is designed to return a distance matrix of a specific region or band within a chromosome. It's important for analyzing spatial relationships within cellular structures.
+
+
+## Multi Cell3D
