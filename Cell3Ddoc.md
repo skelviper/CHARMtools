@@ -1,9 +1,9 @@
 # Cell3D class documentation
 
-## Cell 3D
+## Overview
+The `Cell3D` and `MultiCell3D` class is intended for handling and analyzing three-dimensional genome structure cellular data. 
 
-### Overview
-The `Cell3D` class is intended for handling and analyzing three-dimensional cellular data. 
+## Classes and Functions
 
 ### Class: `Cell3D`
 - **Initialization (`__init__`):**
@@ -54,4 +54,25 @@ The `Cell3D` class is intended for handling and analyzing three-dimensional cell
   - Description: This method is designed to return a distance matrix of a specific region or band within a chromosome. It's important for analyzing spatial relationships within cellular structures.
 
 
-## Multi Cell3D
+### Class: `MultiCell3D`
+
+- **Initialization (`__init__`):**
+  - Parameters:
+    - `cells`: List of `Cell3D` objects.
+
+get_info
+get_cell
+get_data
+subset
+calc_distance_matrix
+calc_3dproximity_matrix
+
+calc_scABC_pred_gene
+calc_feature_matrix
+calc_feature_proximity_matrix
+calc_radial_position_matrix
+get_feature_vec
+FindMarkers
+zoomify_matrix
+simple_diff
+
