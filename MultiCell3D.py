@@ -243,15 +243,8 @@ class MultiCell3D:
             cellnames = self.cellnames
         temp_cells = self.get_cell(cellnames)
 
-        with concurrent.futures.ProcessPoolExecutor(20) as executor:
-            results = list(tqdm.tqdm(
-                            executor.map(
-                                partial(_get_data,**kwargs),
-                                [cell for cell in temp_cells]
-                            ),
-                        total=len(cellnames)
-                    )
-                )
+        with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+            results = list(executor.map(partial(_get_data,**kwargs),[cell for cell in temp_cells]))
         return results
         
     def subset(self,cellnames):
