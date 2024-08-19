@@ -214,20 +214,16 @@ class Cell3D:
         dense_df = dense_df[columns_order]
         return dense_df
 
-    def get_data(self,genome_coord = "",if_dense=False,if_slice=False,random_slice=False,slice_width = 3,rotate=False,
-                 rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
+    def get_data(self,genome_coord = "",if_dense=True,rotate=False,rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
         """
         Get the data of the Cell3D object.
 
         Parameters:
-            query: str
-                Query string to filter the data
-            if_slice: bool
-                Whether to slice the data
-            random_slice: bool
-                Whether to slice randomly
-            slice_width: float
-                Width of the slice
+            genome_coord : str
+                Genome coordinates in the format of "chrom:start-end" / "chrom" 
+                if blank, return the whole data
+            if_dense : bool
+                Whether to convert sparse data to dense data
             rotate: bool
                 Whether to rotate the data
             rotate_[xyz]_angle: float
@@ -257,6 +253,7 @@ class Cell3D:
                 tdg_temp = pd.read_hdf(self.on_disk_path, 'tdg').reset_index().copy()
             else:
                 tdg_temp = self.tdg.copy()
+
         if rotate:
             rotated = Cell3D._point_cloud_rotation(tdg_temp[["x","y","z"]].values,
                                         x_angle=(rotate_x_angle is None and np.random.uniform(0, 2*np.pi) or rotate_x_angle),
@@ -265,22 +262,42 @@ class Cell3D:
                                         )
             tdg_temp = tdg_temp.assign(x=rotated[:,0],y=rotated[:,1],z=rotated[:,2])
 
-        if if_slice:
-            if random_slice:
-                xrange = (tdg_temp["x"].min(),tdg_temp["x"].max())
-                slice_upper = np.random.uniform(xrange[0]+slice_width,xrange[1])
-                slice_lower = slice_upper - slice_width
-                tdg_temp = tdg_temp.query(f'x > @slice_lower & x < @slice_upper')
-            else:
-                slice_width = slice_width / 2 
-                tdg_temp = tdg_temp.query("x > -@slice_width & x < @slice_width")
-
         if if_dense:
             if genome_coord == "":
                 raise ValueError("genome_coord should be provided to convert sparse data to dense data")
             tdg_temp = self._sparse_to_dense(genome_coord,tdg_temp)
-
+        
         return tdg_temp
+
+
+    def get_data_slice(self,random_slice = False,slice_width = 3,if_rotate=False,rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
+        """
+        Method for insilico-GAM
+        """
+        tdg_temp = self.get_data(if_rotate,rotate_x_angle,rotate_y_angle,rotate_z_angle)
+
+        if random_slice:
+            xrange = (tdg_temp["x"].min(),tdg_temp["x"].max())
+            slice_upper = np.random.uniform(xrange[0]+slice_width,xrange[1])
+            slice_lower = slice_upper - slice_width
+            tdg_temp = tdg_temp.query(f'x > @slice_lower & x < @slice_upper')
+        else:
+            slice_width = slice_width / 2 
+            tdg_temp = tdg_temp.query("x > -@slice_width & x < @slice_width")
+        
+        return tdg_temp
+        
+
+    def get_data_cluster(self,eps=1.2,min_samples=5,cluster_name = "cluster",type ="normal",random_state=42):
+        """
+        Method for insilico-SPRITE
+        """
+        if cluster_name in self.tdg.columns:
+            warnings.warn(f"Column {cluster_name} already exists, will be overwritten")
+
+        self.calc_3D_cluster(eps=eps,min_samples=min_samples,random_state=random_state)
+
+        return self.tdg[['chrom','pos','x','y','z',cluster_name]]
     
     def get_feature_vec(self, genome_coord, column_name):
         """
