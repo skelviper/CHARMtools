@@ -50,6 +50,25 @@ class Cell3D:
     def __repr__(self):
         self.get_info()
         return ""
+
+    def dense_tdg(self):
+        if self.on_disk:
+            self.to_memory()
+        if self.chrom_length is None:
+            raise ValueError("Chrom length is not available, please run add_chrom_length first")
+        result_df = pd.DataFrame(columns = ['chrom','pos'])
+        for index,row in self.chrom_length.iterrows():
+            chrom = row["chrom"]
+            length = row["size"]
+            positions = np.arange(0,length,self.resolution).astype(int)
+            temp_df = pd.DataFrame({'chrom':chrom,'pos':positions}) 
+            result_df = pd.concat([result_df,temp_df],ignore_index=True)
+        new_tdg = pd.merge(result_df,self.tdg,on=['chrom','pos'],how='left').copy()
+        new_tdg.sort_values(by=['chrom','pos'],inplace=True)
+        if self.kdtree is not None:
+            self.kdtree = cKDTree(new_tdg[["x", "y", "z"]].values)
+        self.tdg = new_tdg
+        return None
     
     def build_kdtree(self):
         if self.on_disk:
@@ -122,7 +141,7 @@ class Cell3D:
         points = points.copy()
         num_points = points.shape[0]
         for i in tqdm.tqdm(range(num_iter)):
-            forces = calc_forces(points, contacts, k_backbone, k_repulsion, k_contact, rep_dist)
+            forces = _calc_forces(points, contacts, k_backbone, k_repulsion, k_contact, rep_dist)
             points += lr * forces
             #print(points)
             # print RMS force
@@ -214,7 +233,7 @@ class Cell3D:
         dense_df = dense_df[columns_order]
         return dense_df
 
-    def get_data(self,genome_coord = "",if_dense=True,rotate=False,rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
+    def get_data(self,genome_coord = "",if_dense=False,rotate=False,rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
         """
         Get the data of the Cell3D object.
 
@@ -264,28 +283,51 @@ class Cell3D:
 
         if if_dense:
             if genome_coord == "":
-                raise ValueError("genome_coord should be provided to convert sparse data to dense data")
-            tdg_temp = self._sparse_to_dense(genome_coord,tdg_temp)
+                # if object without chrom_length, raise error
+                if self.chrom_length is None:
+                    raise ValueError("Running whole chromosome calculation with chrom_length is not available, |\
+                                     please run add_chrom_length first")
+                result_df = pd.DataFrame(columns = ['chrom','pos'])
+                for index,row in self.chrom_length.iterrows():
+                    chrom = row["chrom"]
+                    length = row["size"]
+                    positions = np.arange(0,length,self.resolution).astype(int)
+                    temp_df = pd.DataFrame({'chrom':chrom,'pos':positions}) 
+                    result_df = pd.concat([result_df,temp_df],ignore_index=True) 
+                tdg_temp = pd.merge(result_df,tdg_temp,on=['chrom','pos'],how='left')    
+            else:
+                tdg_temp = self._sparse_to_dense(genome_coord,tdg_temp)
         
         return tdg_temp
 
 
-    def get_data_slice(self,random_slice = False,slice_width = 3,if_rotate=False,rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
+    def get_data_slice(self,genome_coord="",random_slice_x = False,if_full = True,
+                       slice_width = 3,if_rotate=False,
+                       rotate_x_angle=None,rotate_y_angle=None,rotate_z_angle=None):
         """
         Method for insilico-GAM
         """
-        tdg_temp = self.get_data(if_rotate,rotate_x_angle,rotate_y_angle,rotate_z_angle)
-
-        if random_slice:
-            xrange = (tdg_temp["x"].min(),tdg_temp["x"].max())
-            slice_upper = np.random.uniform(xrange[0]+slice_width,xrange[1])
-            slice_lower = slice_upper - slice_width
-            tdg_temp = tdg_temp.query(f'x > @slice_lower & x < @slice_upper')
+        tdg_temp = self.get_data(genome_coord=genome_coord,
+                                 rotate = if_rotate,
+                                 rotate_x_angle = rotate_x_angle,
+                                 rotate_y_angle = rotate_y_angle,
+                                 rotate_z_angle = rotate_z_angle,
+                                 if_dense=True
+                        )
+        if if_full:
+            tdg_temp["in_slice"] = tdg_temp["x"].apply(lambda x: -slice_width < x < slice_width)
+            return tdg_temp
         else:
-            slice_width = slice_width / 2 
-            tdg_temp = tdg_temp.query("x > -@slice_width & x < @slice_width")
-        
-        return tdg_temp
+            if random_slice_x:
+                xrange = (tdg_temp["x"].min(),tdg_temp["x"].max())
+                slice_upper = np.random.uniform(xrange[0]+slice_width,xrange[1])
+                slice_lower = slice_upper - slice_width
+                tdg_temp = tdg_temp.query(f'x > @slice_lower & x < @slice_upper')
+            else:
+                slice_width = slice_width / 2 
+                tdg_temp = tdg_temp.query("x > -@slice_width & x < @slice_width")
+            
+            return tdg_temp
         
 
     def get_data_cluster(self,eps=1.2,min_samples=5,cluster_name = "cluster",type ="normal",random_state=42):
