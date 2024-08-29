@@ -258,6 +258,49 @@ class MultiCell3D:
             obj.matrices[key] = self.matrices[key].loc[:,cellnames]
         return obj
 
+    def calc_insilico_GAM(self,genome_coord,cellnames=None,slice_width=3,num_slices=10):
+        """
+        Calculate the insilico GAM matrix for a given genomic coordinate.
+        """
+        if cellnames is None:
+            cellnames = self.cellnames
+        temp_cells = self.get_cell(cellnames)
+        slices = []
+        for cell in tqdm.tqdm(temp_cells):
+            for i in range(num_slices):
+                slices.append(cell.get_data_slice(genome_coord = genome_coord,if_rotate=True,if_full=True,slice_width=slice_width)["in_slice"])
+
+        slices_temp = np.array(slices).T
+        slices_temp = slices_temp.astype(int)
+        mean_slices = slices_temp.mean(axis=1)
+        mean_both = slices_temp @ slices_temp.T / slices_temp.shape[1]
+        mean_product = np.outer(mean_slices, mean_slices)
+        result = mean_both - mean_product
+
+        return result
+    
+    def calc_insilico_SPRITE(self,genome_coord,cellnames=None,n_sphere=2000,sample_frac=0.5,radius=3):
+        """
+        Calculate the insilico SPRITE matrix for a given genomic coordinate.
+        """
+        if cellnames is None:
+            cellnames = self.cellnames
+        temp_cells = self.get_cell(cellnames)
+        spheres = []
+        for i in tqdm.tqdm(range(n_sphere)):
+            # random select a cell
+            cell = np.random.choice(temp_cells)
+            spheres.append(cell.get_data_sphere(genome_coord,sample_frac=sample_frac)["in_ball"].values,radius=3)
+        spheres_temp = np.array(spheres).T
+        spheres_temp = spheres_temp.astype(int)
+        mean_spheres = spheres_temp.mean(axis=1)
+        mean_both = spheres_temp @ spheres_temp.T / spheres_temp.shape[1]
+        mean_product = np.outer(mean_spheres, mean_spheres)
+        result = mean_both - mean_product
+
+        return result
+ 
+
     def calc_distance_matrix(self, genome_coord, cellnames=None,allele=True,combine=True,nproc=20):
         """
         Calculate the distance matrix between cells for a given genomic coordinate.

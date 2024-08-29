@@ -332,7 +332,7 @@ class Cell3D:
 
     def get_data_cluster(self,eps=1.2,min_samples=5,cluster_name = "cluster",type ="normal",random_state=42):
         """
-        Method for insilico-SPRITE
+        Method for insilico-SPRITE(Cluster)
         """
         if cluster_name in self.tdg.columns:
             warnings.warn(f"Column {cluster_name} already exists, will be overwritten")
@@ -341,6 +341,25 @@ class Cell3D:
 
         return self.tdg[['chrom','pos','x','y','z',cluster_name]]
     
+    def get_data_sphere(self,genome_coord="",radius=3,sample_frac=0.1):
+        if genome_coord == "":
+            # warning not fully implemented
+            warnings.warn("Whole genome calculation is not fully implemented")
+            if self.kdtree is None:
+                raise ValueError("kdtree is not built, please run build_kdtree first")
+            random_point = self.tdg.sample(1)[["x","y","z"]].values[0]
+            indices = self.kdtree.query_ball_point(random_point,r=radius)
+            points_in_ball = self.tdg.iloc[indices]
+            return points_in_ball.sample(frac=sample_frac)
+        else:
+            tdg_temp = self.get_data(genome_coord=genome_coord,if_dense=True)
+            kdtree_temp = cKDTree(tdg_temp[["x","y","z"]].values)
+            random_point = tdg_temp.sample(1)[["x","y","z"]].values[0]
+            indices = kdtree_temp.query_ball_point(random_point,r=radius)
+            indices_sample = np.random.choice(indices,int(sample_frac*len(indices)),replace=False)
+            tdg_temp["in_ball"] = tdg_temp.index.isin(indices_sample).astype(int)
+            return tdg_temp
+        
     def get_feature_vec(self, genome_coord, column_name):
         """
         INPUT:
