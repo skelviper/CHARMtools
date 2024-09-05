@@ -23,7 +23,9 @@ def peak_enrichment(frag_df,peak_df,chrom_length,resolution=100,flank=2000,npeak
     chrom_length = chrom_length.copy()
     chrom_length.columns = ["chrom","length"]
 
-    temp_peaks = temp_peaks.sample(npeaks)
+    if temp_peaks.shape[0] >= npeaks:
+        temp_peaks = temp_peaks.sample(npeaks)
+        
     temp_peaks["start"] = ((temp_peaks["start"] + temp_peaks["end"]) / 2 // resolution * resolution).astype(int)
     temp_peaks["end"] = (temp_peaks["start"] + resolution).astype(int)
 
