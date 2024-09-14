@@ -12,7 +12,10 @@ def f(X, C, N):
     Rearranged to:
     f(X) = C/X - (1 - exp(-N/X))
     """
-    return C / X - (1 - math.exp(-N / X))
+    try:
+        return C / X - (1 - math.exp(-N / X))
+    except ZeroDivisionError:
+        return float('inf')
 
 def estimate_library_size(read_pairs, unique_read_pairs):
     """
@@ -24,8 +27,7 @@ def estimate_library_size(read_pairs, unique_read_pairs):
     :return: estimated number of distinct molecules in the library (X) or None if invalid input
     """
     read_pair_duplicates = read_pairs - unique_read_pairs
-
-    if read_pairs > 0 and read_pair_duplicates > 0:
+    try:
         m = 1.0
         M = 100.0
 
@@ -49,7 +51,7 @@ def estimate_library_size(read_pairs, unique_read_pairs):
                 M = r
 
         return int(unique_read_pairs * (m + M) / 2.0)
-    else:
+    except:
         return None
     
 def seg2pairs(file_path,mapq_threshold):
@@ -82,7 +84,7 @@ def seg2pairs(file_path,mapq_threshold):
             
     columns = ['chr1', 'start1', 'end1', 'chr2', 'start2', 'end2', 'mapq1', 'mapq2']
     df = pd.DataFrame(rows, columns=columns)
-    df=df.query('mapq1 > @mapq_threshold and mapq2 > @mapq_threshold')
+    df=df.query('mapq1 > @mapq_threshold and mapq2 > @mapq_threshold').copy()
 
     df["start1"] = df["start1"].astype(int)
     df["end1"] = df["end1"].astype(int)
