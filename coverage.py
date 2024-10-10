@@ -140,8 +140,10 @@ def pairs2coverage(pairs, resolution=100000):
     pos_middle = ((pairs.loc[~cross_chrom_or_distant, 'pos1'] + pairs.loc[~cross_chrom_or_distant, 'pos2']) // 2)
 
     # merge craete DataFrame and calc coverage at given resolution
-    chroms = pd.concat([chrom1_distant, chrom2_distant, chrom_middle])
-    positions = pd.concat([pos1_distant, pos2_distant, pos_middle])
+    #chroms = pd.concat([chrom1_distant, chrom2_distant, chrom_middle])
+    #positions = pd.concat([pos1_distant, pos2_distant, pos_middle])
+    chroms = pd.concat([chrom1_distant, chrom_middle])
+    positions = pd.concat([pos1_distant, pos_middle])
     covs = pd.DataFrame({'chrom': chroms, 'pos': positions})
     covs['pos'] = (covs['pos'] // resolution) * resolution
     covs = covs.groupby(['chrom', 'pos']).size().reset_index(name='count')

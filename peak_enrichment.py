@@ -34,14 +34,15 @@ def peak_enrichment(frag_df,peak_df,chrom_length,resolution=100,flank=2000,npeak
     temp_frags = temp_frags.groupby(["chrom","start","end"]).size().reset_index().rename(columns={0:"count"})
 
     # join with chrom_length, dense the fragments
-    result_df = pd.DataFrame(columns=["chrom","start"])
-    for index,row in chrom_length.iterrows():
-        chrom = row["chrom"]
-        length = row["length"]
-        positions=np.arange(0,length,resolution).astype(int)
-        temp_df = pd.DataFrame({"chrom":chrom,"start":positions})
-        result_df = pd.concat([result_df,temp_df],ignore_index=True)
-    result_df["end"] = result_df["start"]+resolution
+    chrom_bins = {chrom: np.arange(0, length, resolution) for chrom, length in zip(chrom_length["chrom"], chrom_length["length"])}
+    result_list = []
+    for chrom, positions in chrom_bins.items():
+        temp_df = pd.DataFrame({"chrom": chrom, "start": positions, "end": positions + resolution})
+        temp_merged = temp_df.merge(temp_frags[temp_frags["chrom"] == chrom], on=["chrom", "start", "end"], how="left").fillna(0)
+        result_list.append(temp_merged)
+
+    temp_frags = pd.concat(result_list, ignore_index=True)
+    temp_frags.set_index(["chrom", "start", "end"], inplace=True)
 
     temp_frags = result_df.merge(temp_frags,how="left",on=["chrom","start","end"]).fillna(0)
     temp_frags.set_index(["chrom","start","end"],inplace=True)
