@@ -44,9 +44,6 @@ def peak_enrichment(frag_df,peak_df,chrom_length,resolution=100,flank=2000,npeak
     temp_frags = pd.concat(result_list, ignore_index=True)
     temp_frags.set_index(["chrom", "start", "end"], inplace=True)
 
-    temp_frags = result_df.merge(temp_frags,how="left",on=["chrom","start","end"]).fillna(0)
-    temp_frags.set_index(["chrom","start","end"],inplace=True)
-
     res = []
     for peak_row in tqdm.tqdm(temp_peaks.iterrows()):
         peak_row = peak_row[1].values
