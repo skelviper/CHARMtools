@@ -13,6 +13,7 @@ import copy
 
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import LabelEncoder
+import warnings
 
 def dev_only(func):
     import functools
@@ -768,12 +769,15 @@ class Cell3D:
         chrom_length["chrom"] = chrom_length["chrom"].str.replace("pat", "a", regex=True)
         chrom_length["chrom"] = chrom_length["chrom"].str.replace("mat", "b", regex=True)
 
+        valid_chroms = self.tdg["chrom"].unique()
+        chrom_length = chrom_length.query("chrom in @valid_chroms")
+
         self.features.append("chrom_length")
         self.chrom_length = chrom_length
 
     # Functions for output sub-region matrix
     
-    def calc_distance_matrix(self,genome_coord):
+    def calc_distance_matrix(self,genome_coord,obsexp=False):
         """
         Calculate the distance matrix of a given region.
         INPUT:
@@ -786,6 +790,21 @@ class Cell3D:
         mat = scipy.spatial.distance.squareform(
             scipy.spatial.distance.pdist(temp_df[["x","y","z"]].values)
         )
+        if obsexp:
+
+            def _obs_exp(mat, expected):
+                mat_norm = np.zeros_like(mat)
+                n = mat.shape[0]
+                for k in range(1, n):
+                    mat_norm[np.arange(k, n), np.arange(0, n - k)] = mat[np.arange(k, n), np.arange(0, n - k)] / expected[k]
+                mat_norm = mat_norm + mat_norm.T - np.diag(np.diag(mat_norm))
+                return mat_norm
+            
+            if self.expected is None:
+                raise ValueError("Expected vector is not available, please run calc_expected first")
+            chrom = genome_coord.split(":")[0]
+            mat = _obs_exp(mat, self.expected[chrom])
+
         return mat
 
     def calc_feature_matrix(self,genome_coord,feature):
@@ -929,6 +948,30 @@ class Cell3D:
 
         return tss_row[expression_key], temp_tdg.abc.values
     
+    def calc_expected(self,n_diag=None):
+        """
+        calculate expected distance for each chromosome, for calculation efficiency, you can only calculate the first n_diag diagonals
+        """
+        if self.on_disk:
+            self.to_memory()
+        if self.chrom_length is None:
+            raise ValueError("Chromosome length is needed for calculating expected, please run add_chrom_length first")
+        self.expected = {}
+        for chrom,length in self.chrom_length.values:
+            genome_coord = chrom + ":0-" + str(length)
+            mat = self.calc_distance_matrix(genome_coord)
+            means = []
+            if n_diag is None:
+                n_diag = mat.shape[0]
+            for i in range(n_diag):
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", category=RuntimeWarning)
+                    means.append(np.nanmean(np.diag(mat,i)))
+                    self.expected[chrom] = np.array(means)
+
+        self.features.append("expected")
+        return None
+        
 
     # data visualize
     def write_cif(self,factor_b,outputpath = None):
