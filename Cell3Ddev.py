@@ -768,10 +768,7 @@ class Cell3D:
         chrom_length["chrom"] = chrom_length["chrom"].str.replace("\(mat\)", "b", regex=True)
         chrom_length["chrom"] = chrom_length["chrom"].str.replace("pat", "a", regex=True)
         chrom_length["chrom"] = chrom_length["chrom"].str.replace("mat", "b", regex=True)
-
-        valid_chroms = self.tdg["chrom"].unique()
-        chrom_length = chrom_length.query("chrom in @valid_chroms")
-
+        
         self.features.append("chrom_length")
         self.chrom_length = chrom_length
 
