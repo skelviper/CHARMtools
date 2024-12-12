@@ -41,7 +41,7 @@ def cli():
                             dest="max_count",
                             type=int,
                             action="store",
-                            default=10,
+                            default=15,
                             help="number threshold of adjacent legs"
     )                   
     clean_leg_arg.add_argument("-o", "--output", 

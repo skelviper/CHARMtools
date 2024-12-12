@@ -482,7 +482,7 @@ class Cell3D:
             peaks["end"] = peaks["end"] + flank
             fragments_bed = pybedtools.BedTool.from_dataframe(fragments)
             peak_bed = pybedtools.BedTool.from_dataframe(peaks)
-            intersect = peak_bed.intersect(fragments_bed,wa=True,wb=True)
+            intersect = peak_bed.intersect(fragments_bed,wa=True,wb=True,nonamecheck=True)
             intersect = intersect.to_dataframe()
             intersect = intersect.iloc[:,3:9]
             intersect.columns =  ["chrom", "start", "end", "allele", "score", "strand"]
