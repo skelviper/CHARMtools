@@ -224,6 +224,14 @@ class Cell3D:
 
     def _sparse_to_dense(self,genome_coord,sparse_df):
         chrom,start,end = _auto_genome_coord(genome_coord)
+
+        if start is None:
+            start = 0
+        if end is None:
+            if self.chrom_length is None:
+                raise ValueError("Chrom length is not available, please run add_chrom_length first")
+            end = self.chrom_length.set_index("chrom").to_dict()["size"][chrom]
+
         positions = np.arange(start,end,self.resolution)
         dense_df = pd.DataFrame(positions,columns=['pos'])
         sparse_df['pos'] = sparse_df['pos'].astype(int)
@@ -954,17 +962,30 @@ class Cell3D:
         if self.chrom_length is None:
             raise ValueError("Chromosome length is needed for calculating expected, please run add_chrom_length first")
         self.expected = {}
+        # for chrom,length in self.chrom_length.values:
+        #     genome_coord = chrom + ":0-" + str(length)
+        #     mat = self.calc_distance_matrix(genome_coord)
+        #     means = []
+        #     if n_diag is None:
+        #         n_diag = mat.shape[0]
+        #     for i in range(n_diag):
+        #         with warnings.catch_warnings():
+        #             warnings.simplefilter("ignore", category=RuntimeWarning)
+        #             means.append(np.nanmean(np.diag(mat,i)))
+        #             self.expected[chrom] = np.array(means)
+
         for chrom,length in self.chrom_length.values:
-            genome_coord = chrom + ":0-" + str(length)
-            mat = self.calc_distance_matrix(genome_coord)
+            temp_df = self.get_data(genome_coord = chrom,if_dense=True).copy()
             means = []
             if n_diag is None:
-                n_diag = mat.shape[0]
-            for i in range(n_diag):
+                n_diag = temp_df.shape[0]
+
+            for n in range(n_diag):
+                # suppress runtime warning
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", category=RuntimeWarning)
-                    means.append(np.nanmean(np.diag(mat,i)))
-                    self.expected[chrom] = np.array(means)
+                    means.append(np.nanmean(np.linalg.norm(temp_df[['x','y','z']].values - temp_df[['x','y','z']].shift(-n).values, axis=1)))
+            self.expected[chrom] = np.array(means)
 
         self.features.append("expected")
         return None
