@@ -386,10 +386,10 @@ class Cell3D:
 
         if start is None:
             matsize = self.chrom_length.query("chrom == @chrom")["size"].values[0] // self.resolution + 1
-            reconstruct_df = self.get_data(genome_coord)
+            reconstruct_df = self.get_data(genome_coord,if_dense=True)
         else:
             matsize = (end - start - 1) // self.resolution + 1
-            reconstruct_df = self.get_data(genome_coord)
+            reconstruct_df = self.get_data(genome_coord,if_dense=True)
             reconstruct_df["pos"] = reconstruct_df["pos"] - start
 
         reconstruct_df["pos"] = reconstruct_df["pos"] // self.resolution

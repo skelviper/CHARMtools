@@ -463,25 +463,33 @@ class MultiCell3D:
         self.matrices[key] = mat
         return None
 
-    def get_feature_vec(self,genome_coord,column_name,cellnames=None,combine=True,allele=True):
+    def get_feature_vec(self,genome_coord,column_name,cellnames=None,combine=True,allele=True,nproc=20):
         """
         Get the feature vector for a given genomic coordinate.
         """
         if cellnames is None:
             cellnames = self.cellnames
         if allele:
-            results = [cell.get_feature_vec(genome_coord,column_name) for cell in tqdm.tqdm(self.get_cell(cellnames))]
+            with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+                results = list(tqdm.tqdm(executor.map(partial(_get_feature_vec,genome_coord=genome_coord,column_name=column_name), self.get_cell(cellnames)), total=len(cellnames)))
+           # results = [cell.get_feature_vec(genome_coord,column_name) for cell in tqdm.tqdm(self.get_cell(cellnames))]
         else:
             genome_coorda = genome_coord.replace(":","a:")
             genome_coordb = genome_coord.replace(":","b:")
-            results = []
-            for cell in tqdm.tqdm(self.get_cell(cellnames)):
-                results.append(cell.get_feature_vec(genome_coorda,column_name))
-                results.append(cell.get_feature_vec(genome_coordb,column_name))
+            # results = []
+            # for cell in tqdm.tqdm(self.get_cell(cellnames)):
+            #     results.append(cell.get_feature_vec(genome_coorda,column_name))
+            #     results.append(cell.get_feature_vec(genome_coordb,column_name))
+            with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
+                results1 = list(tqdm.tqdm(executor.map(partial(_get_feature_vec,genome_coord=genome_coorda,column_name=column_name), self.get_cell(cellnames)), total=len(cellnames)))
+                results2 = list(tqdm.tqdm(executor.map(partial(_get_feature_vec,genome_coord=genome_coordb,column_name=column_name), self.get_cell(cellnames)), total=len(cellnames)))
+            results = results1 + results2
+        results = np.array(results)
+        results[np.isnan(results)] = 0
         if combine:
-            return np.nanmean(np.array(results), axis=0)
+            return np.mean(results,axis=0)
         else:
-            return np.array(results)
+            return results
 
     def FindMarkers(self, matrix_key,cellnames_group1, cellnames_group2, method = "manwhitneyu"):
         """
@@ -562,6 +570,8 @@ def _get_data(cell,**kwargs):
     df = cell.get_data(**kwargs)
     df["cellname"] = cell.cellname
     return df
+def _get_feature_vec(cell,genome_coord,column_name):
+    return cell.get_feature_vec(genome_coord,column_name)
 
 
 def _auto_genome_coord(genome_coord):
