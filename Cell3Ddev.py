@@ -52,6 +52,9 @@ class Cell3D:
         self.get_info()
         return ""
 
+    def copy(self):
+        return copy.deepcopy(self)
+
     def dense_tdg(self):
         if self.on_disk:
             self.to_memory()
@@ -177,8 +180,10 @@ class Cell3D:
         tdg["y"] = tdg["y"].astype(np.float32)
         tdg["z"] = tdg["z"].astype(np.float32)
 
-        tdg["chrom"] = tdg["chrom"].str.replace("\(pat\)", "a", regex=True)
-        tdg["chrom"] = tdg["chrom"].str.replace("\(mat\)", "b", regex=True)
+        #tdg["chrom"] = tdg["chrom"].str.replace("\(pat\)", "a", regex=True)
+        tdg["chrom"] = tdg["chrom"].str.replace(r"\(pat\)", "a", regex=True)  
+        tdg["chrom"] = tdg["chrom"].str.replace(r"\(mat\)", "b", regex=True)  
+        #tdg["chrom"] = tdg["chrom"].str.replace("\(mat\)", "b", regex=True)
         LE = LabelEncoder()
         tdg.chrom = pd.Categorical(tdg.chrom)
         tdg['chrom_code'] = LE.fit_transform(tdg['chrom'])
@@ -370,7 +375,7 @@ class Cell3D:
             return tdg_temp
         
     def get_feature_vec(self, genome_coord, column_name):
-        """
+        r"""
         INPUT:
             genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end. \|
                         whole chromosome is also acceptable. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a"
@@ -772,8 +777,10 @@ class Cell3D:
     def add_chrom_length(self,chrom_length_path):
         chrom_length = pd.read_csv(chrom_length_path,sep="\t",header=None)
         chrom_length.columns = ["chrom","size"]
-        chrom_length["chrom"] = chrom_length["chrom"].str.replace("\(pat\)", "a", regex=True)
-        chrom_length["chrom"] = chrom_length["chrom"].str.replace("\(mat\)", "b", regex=True)
+        #chrom_length["chrom"] = chrom_length["chrom"].str.replace("\(pat\)", "a", regex=True)
+        #chrom_length["chrom"] = chrom_length["chrom"].str.replace("\(mat\)", "b", regex=True)
+        chrom_length["chrom"] = chrom_length["chrom"].str.replace(r"\(pat\)", "a", regex=True)  
+        chrom_length["chrom"] = chrom_length["chrom"].str.replace(r"\(mat\)", "b", regex=True)  
         chrom_length["chrom"] = chrom_length["chrom"].str.replace("pat", "a", regex=True)
         chrom_length["chrom"] = chrom_length["chrom"].str.replace("mat", "b", regex=True)
         
@@ -783,7 +790,7 @@ class Cell3D:
     # Functions for output sub-region matrix
     
     def calc_distance_matrix(self,genome_coord,obsexp=False):
-        """
+        r"""
         Calculate the distance matrix of a given region.
         INPUT:
             genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end. \|
@@ -813,7 +820,7 @@ class Cell3D:
         return mat
 
     def calc_feature_matrix(self,genome_coord,feature):
-        """
+        r"""
 
         !!! Danger Zone!!!
 
