@@ -78,6 +78,26 @@ class Cell3D:
         if self.on_disk:
             self.to_memory()
         self.kdtree = cKDTree(self.tdg[["x", "y", "z"]].values)
+
+    def to_pairs(self,pairs_path,distance_threshold=2):
+        """
+        generate pairs from 3D structure
+        """
+        if self.on_disk:
+            self.to_memory()
+        if self.kdtree is None:
+            self.build_kdtree()
+
+        pairs= self.kdtree.query_pairs(r=distance_threshold)
+        rows1, rows2 = zip(*pairs) 
+        df1 = self.tdg.loc[list(rows1), ['chrom', 'pos']].rename(columns={'chrom': 'chrom1', 'pos': 'pos1'})
+        df2 = self.tdg.loc[list(rows2), ['chrom', 'pos']].rename(columns={'chrom': 'chrom2', 'pos': 'pos2'})
+        result = pd.concat([df1.reset_index(drop=True), df2.reset_index(drop=True)], axis=1)
+        result["readid"] = "."
+        result = result[[ "readid","chrom1", "pos1", "chrom2", "pos2"]]
+
+        result.to_csv(pairs_path,sep="\t",index=False,header=False)
+
     
     # Construct a Cell3D object
     @dev_only
