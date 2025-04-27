@@ -315,11 +315,11 @@ class MultiCell3D:
         temp_cells = self.get_cell(cellnames)
         if allele:
             with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
-                results = list(tqdm.tqdm(executor.map(partial(_calc_distance,genome_coord=genome_coord), temp_cells), total=len(temp_cells)))
+                results = list(executor.map(partial(_calc_distance,genome_coord=genome_coord), temp_cells), total=len(temp_cells))
         else:
             with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
-                results1 = list(tqdm.tqdm(executor.map(partial(_calc_distance,genome_coord=genome_coord.replace(":","a:")), temp_cells), total=len(temp_cells)))
-                results2 = list(tqdm.tqdm(executor.map(partial(_calc_distance,genome_coord=genome_coord.replace(":","b:")), temp_cells), total=len(temp_cells)))
+                results1 = list(executor.map(partial(_calc_distance,genome_coord=genome_coord.replace(":","a:")), temp_cells))
+                results2 = list(executor.map(partial(_calc_distance,genome_coord=genome_coord.replace(":","b:")), temp_cells))
             results = results1 + results2
         if combine:
             return np.nanmean(results, axis=0)
@@ -335,11 +335,11 @@ class MultiCell3D:
 
         if allele:
             with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
-                results = list(tqdm.tqdm(executor.map(partial(_calc_proximity,genome_coord=genome_coord,distance_threshold=distance_threshold), temp_cells), total=len(temp_cells)))
+                results = list(executor.map(partial(_calc_proximity,genome_coord=genome_coord,distance_threshold=distance_threshold), temp_cells))
         else:
             with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
-                results1 = list(tqdm.tqdm(executor.map(partial(_calc_proximity,genome_coord=genome_coord.replace(":","a:"),distance_threshold=distance_threshold), temp_cells), total=len(temp_cells)))
-                results2 = list(tqdm.tqdm(executor.map(partial(_calc_proximity,genome_coord=genome_coord.replace(":","b:"),distance_threshold=distance_threshold), temp_cells), total=len(temp_cells)))
+                results1 = list(executor.map(partial(_calc_proximity,genome_coord=genome_coord.replace(":","a:"),distance_threshold=distance_threshold), temp_cells))
+                results2 = list(executor.map(partial(_calc_proximity,genome_coord=genome_coord.replace(":","b:"),distance_threshold=distance_threshold), temp_cells))
             results = results1 + results2
         if combine:
             return np.nanmean(results, axis=0)
@@ -471,18 +471,13 @@ class MultiCell3D:
             cellnames = self.cellnames
         if allele:
             with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
-                results = list(tqdm.tqdm(executor.map(partial(_get_feature_vec,genome_coord=genome_coord,column_name=column_name), self.get_cell(cellnames)), total=len(cellnames)))
-           # results = [cell.get_feature_vec(genome_coord,column_name) for cell in tqdm.tqdm(self.get_cell(cellnames))]
+                results = list(executor.map(partial(_get_feature_vec,genome_coord=genome_coord,column_name=column_name), self.get_cell(cellnames)))
         else:
             genome_coorda = genome_coord.replace(":","a:")
             genome_coordb = genome_coord.replace(":","b:")
-            # results = []
-            # for cell in tqdm.tqdm(self.get_cell(cellnames)):
-            #     results.append(cell.get_feature_vec(genome_coorda,column_name))
-            #     results.append(cell.get_feature_vec(genome_coordb,column_name))
             with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
-                results1 = list(tqdm.tqdm(executor.map(partial(_get_feature_vec,genome_coord=genome_coorda,column_name=column_name), self.get_cell(cellnames)), total=len(cellnames)))
-                results2 = list(tqdm.tqdm(executor.map(partial(_get_feature_vec,genome_coord=genome_coordb,column_name=column_name), self.get_cell(cellnames)), total=len(cellnames)))
+                results1 = list(executor.map(partial(_get_feature_vec,genome_coord=genome_coorda,column_name=column_name), self.get_cell(cellnames)))
+                results2 = list(executor.map(partial(_get_feature_vec,genome_coord=genome_coordb,column_name=column_name), self.get_cell(cellnames)))
             results = results1 + results2
         results = np.array(results)
         results[np.isnan(results)] = 0
@@ -524,7 +519,7 @@ class MultiCell3D:
         diff["p_value_adj"] = multipletests(diff["p_value"], method="fdr_bh")[1]
 
         return diff
-
+    
     def zoomify_matrix(self,matrix_key,resolution,combine_allele=True,inplace=False,new_key=None):
         """
         Zoomify the matrix to a given resolution.

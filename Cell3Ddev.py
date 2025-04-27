@@ -491,7 +491,7 @@ class Cell3D:
         return point_cloud
     
     # Functions to load charm features
-    def _load_bed_fragments(path, resolution, type = "allelic_resolved",peaks = None,flank = 0,keep_3prime = True):
+    def _load_bed_fragments(path, resolution, type = "allelic_resolved",peaks = None,flank = 0,keep_3prime = True,merge_overlap=True):
         """
         path: file path of a tsv file containing chrom, start, end, allele, score, strand
         peaks: a pd.DataFrame containing chrom, start, end
@@ -503,6 +503,46 @@ class Cell3D:
         if fragments.shape[1] > 6:
             fragments = fragments.iloc[:, :6]   
         fragments.columns = ["chrom", "start", "end", "allele", "score", "strand"][:len(fragments.columns)]
+        if merge_overlap:
+            def merge_intervals(group):
+                sorted_group = group.sort_values('start')
+                intervals = sorted_group[['start', 'end']].values
+                
+                if not intervals.size:
+                    return pd.DataFrame()
+                
+                merged = []
+                current_start, current_end = intervals[0]
+                
+                for start, end in intervals[1:]:
+                    if start <= current_end: 
+                        current_end = max(current_end, end)
+                    else:
+                        merged.append((current_start, current_end))
+                        current_start, current_end = start, end
+                
+                merged.append((current_start, current_end))
+                result_df = pd.DataFrame(merged, columns=['start', 'end'])
+
+                result_df['chrom'] = group.name[0]
+                result_df['allele'] = group.name[1]
+                result_df['strand'] = group.name[2]
+                
+                return result_df[['chrom', 'start', 'end', 'allele', 'strand']]
+
+            if fragments.shape[1] > 3:
+                merged_df = (
+                    fragments.groupby(['chrom', 'allele', 'strand'], group_keys=False)
+                    .apply(merge_intervals)
+                    .reset_index(drop=True)
+                    .sort_values(['chrom', 'start'])
+                )
+                merged_df["score"] = "."
+                fragments = merged_df[["chrom", "start", "end", "allele", "score", "strand"]]
+            else:
+                # not implemented yet
+                fragments = fragments#.groupby(["chrom"],group_keys = False).apply(merge_intervals).reset_index(drop=True)
+            
         if keep_3prime:
             fragments = fragments.assign(start=lambda x: np.where(x["strand"] == "+", x["end"] - 1, x["start"]))
             fragments = fragments.assign(end=lambda x: np.where(x["strand"] == "+", x["end"], x["start"] + 1))
