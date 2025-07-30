@@ -315,7 +315,8 @@ class MultiCell3D:
         temp_cells = self.get_cell(cellnames)
         if allele:
             with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
-                results = list(executor.map(partial(_calc_distance,genome_coord=genome_coord), temp_cells), total=len(temp_cells))
+                #results = list(executor.map(partial(_calc_distance,genome_coord=genome_coord), temp_cells), total=len(temp_cells))
+                results = list(executor.map(partial(_calc_distance,genome_coord=genome_coord), temp_cells))
         else:
             with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
                 results1 = list(executor.map(partial(_calc_distance,genome_coord=genome_coord.replace(":","a:")), temp_cells))

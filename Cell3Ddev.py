@@ -777,7 +777,8 @@ class Cell3D:
         indices_list = self.kdtree.query_ball_tree(self.kdtree, r=radius)
         if not if_self:
             #indices_list = [indices[1:] for indices in indices_list]
-            raise ValueError("if_self parameter is not implemented yet")
+            indices_list = [np.array([i for i in indices if i != idx]) for idx, indices in enumerate(indices_list)]
+            #raise ValueError("if_self parameter is not implemented yet")
         if type =="mean":
             avgs = [self.tdg[feature].iloc[indices].mean() for indices in indices_list]
         elif type =="sum":
@@ -956,7 +957,7 @@ class Cell3D:
 
         # if cluster_name already in data
         if cluster_name in data.columns:
-            print(f"Warning: {cluster_name} already in data, remove the old one")
+            #print(f"Warning: {cluster_name} already in data, remove the old one")
             self.tdg.drop(columns=[cluster_name],inplace=True)
 
         data.loc[:,cluster_name] = cluster.labels_
