@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from CHARMtools import Cell3D
+from upload.CHARMtools.archieve import Cell3D
 import tqdm
 import concurrent.futures
 import sys

@@ -1,2 +1,2 @@
 # CHARMtools
-Scripts for scHi-C or multi-omics Data analysis and visualization.
+Scripts for scHi-C and multi-omics Data analysis and visualization.

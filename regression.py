@@ -10,6 +10,10 @@ import pandas as pd
 import tqdm
 from joblib import Parallel, delayed
 
+"""
+For Figure5 in CHARM paper
+"""
+
 class MultiFeatureRegression(nn.Module):
     def __init__(self, input_dim, alpha,norm_type='None'):
         super().__init__()

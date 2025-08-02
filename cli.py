@@ -5,7 +5,7 @@ import clean_splicing
 import clean_isolated
 import sep_clean
 import clean3
-import tdg2cif
+import upload.CHARMtools.archieve.tdg2cif as tdg2cif
 
 def cli():
     parser = argparse.ArgumentParser(prog="CHARMtools", description="Functions for data-analysis in HiRES etc. projects")

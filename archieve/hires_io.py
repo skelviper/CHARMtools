@@ -9,7 +9,7 @@ import pandas as pd
 from functools import partial
 from pkgutil import get_data
 from io import StringIO
-from . import reference
+from .. import reference
 
 
 '''
