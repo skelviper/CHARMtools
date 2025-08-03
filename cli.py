@@ -1,11 +1,12 @@
 import argparse
 
-import clean_leg
-import clean_splicing
-import clean_isolated
-import sep_clean
-import clean3
-import upload.CHARMtools.archieve.tdg2cif as tdg2cif
+from charm_preprocess import clean_leg
+from charm_preprocess import clean_splicing
+from charm_preprocess import clean_isolated
+from charm_preprocess import sep_clean
+from charm_preprocess import clean3
+from charm_preprocess import tdg2cif
+from charm_preprocess import tdg2pairs
 
 def cli():
     parser = argparse.ArgumentParser(prog="CHARMtools", description="Functions for data-analysis in HiRES etc. projects")
@@ -263,7 +264,36 @@ def cli():
                             default=1
     )
     
-        
+    # --------- tdg2pairs subcommand ---------
+    tdg2pairs_arg = subcommands.add_parser(
+                            "tdg2pairs",
+                            help="convert 3dg file to pairs file"
+    )
+    tdg2pairs_arg.set_defaults(handle=tdg2pairs.cli)
+    tdg2pairs_arg.add_argument(
+                            "-i", "--input",
+                            dest="input_file",
+                            metavar="INPUT_FILE",
+                            help="input 3dg filename",
+                            required=True,
+                            action="store"
+    )
+    tdg2pairs_arg.add_argument(
+                            "-o", "--output",
+                            dest="output_file",
+                            metavar="OUTPUT_FILE",
+                            required=True,
+                            help="output pairs file name",
+                            action="store"
+    )
+    tdg2pairs_arg.add_argument(
+                            "-d", "--distance",
+                            dest="distance",
+                            metavar="DISTANCE",
+                            help="distance threshold for proximity",
+                            type=int,
+                            default=3
+    )
 
     args = parser.parse_args()
     #print(args.replace_switch)
