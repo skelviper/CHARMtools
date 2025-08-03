@@ -1,206 +1,117 @@
-# CHARMtools Documentation
+# CHARMtools
 
-This directory contains comprehensive documentation for CHARMtools, a Python package for analyzing 3D chromatin structure data. The documentation is designed for use with GitHub Wiki and provides detailed information about installation, usage, and advanced features.
+**Single-cell Hi-C and Multi-omics Data Analysis and Visualization Toolkit**
 
-## Documentation Structure
+[![Python](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-### Core Documentation
+CHARMtools is a comprehensive toolkit designed for single-cell Hi-C and multi-omics data analysis, providing end-to-end solutions from data preprocessing to advanced analysis.
 
-1. **[Home.md](Home.md)** - Main landing page with overview and navigation
-2. **[Installation-Guide.md](Installation-Guide.md)** - Complete installation instructions
-3. **[Quick-Start.md](Quick-Start.md)** - Getting started tutorial and examples
+## 📋 Table of Contents
 
-### Component Documentation
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Usage Guide](#usage-guide)
+- [Module Descriptions](#module-descriptions)
+- [Contributing](#contributing)
+- [License](#license)
 
-4. **[Cell3D-Objects.md](Cell3D-Objects.md)** - Core data objects and methods
-5. **[Data-Preprocessing.md](Data-Preprocessing.md)** - Data cleaning and preprocessing tools
-6. **[Utilities.md](Utilities.md)** - Utility functions and helper tools
-7. **[Analysis-Tools.md](Analysis-Tools.md)** - Analysis modules and functions
-8. **[Visualization.md](Visualization.md)** - Plotting and visualization capabilities
+## ✨ Features
 
-### Interface Documentation
+- **Data Preprocessing**: Clean promiscuous legs, exon splicing, isolated contact points, and more
+- **3D Structure Analysis**: 3D genome structure modeling and cleaning
+- **Statistical Analysis**: Regression analysis, TSS enrichment, spatial statistics, and more
+- **Visualization**: Rich plotting and visualization tools
+- **Single-cell Analysis**: Specialized tools for single-cell Hi-C analysis
+- **Command Line Interface**: Easy-to-use CLI tools
 
-9. **[Command-Line-Interface.md](Command-Line-Interface.md)** - CLI tools and usage
-10. **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** - FastAPI web interface
-11. **[Troubleshooting.md](Troubleshooting.md)** - Common issues and solutions
+## 🚀 Installation
 
-### Navigation
+### Requirements
 
-12. **[_Sidebar.md](_Sidebar.md)** - GitHub Wiki sidebar navigation
-13. **[README.md](README.md)** - This file
+- Python 3.7+
+- R environment (for some analysis modules)
 
-## Using with GitHub Wiki
+### Installation Steps
 
-### Setup Instructions
+```bash
+# Clone the repository
+git clone https://github.com/your-username/CHARMtools.git
+cd CHARMtools
 
-1. **Create GitHub Wiki**:
-   ```bash
-   # Navigate to your GitHub repository
-   # Click on "Wiki" tab
-   # Click "Create the first page"
-   ```
-
-2. **Upload Documentation**:
-   ```bash
-   # Clone the wiki repository
-   git clone https://github.com/your-username/your-repo.wiki.git
-   
-   # Copy documentation files
-   cp CHARMtools/docs/*.md your-repo.wiki/
-   
-   # Commit and push
-   cd your-repo.wiki
-   git add .
-   git commit -m "Add CHARMtools documentation"
-   git push origin master
-   ```
-
-3. **Set Home Page**:
-   - Rename `Home.md` to `Home.md` (or create a redirect)
-   - This will be the default landing page
-
-### Navigation Features
-
-- **Sidebar Navigation**: The `_Sidebar.md` file provides a navigation menu
-- **Cross-References**: All documents are cross-linked for easy navigation
-- **Search**: GitHub Wiki provides built-in search functionality
-- **Version Control**: All changes are tracked in the wiki repository
-
-## Documentation Features
-
-### Comprehensive Coverage
-
-- **Installation**: Multiple installation methods and troubleshooting
-- **Tutorials**: Step-by-step guides for common tasks
-- **API Reference**: Complete function and class documentation
-- **Examples**: Practical code examples and workflows
-- **Troubleshooting**: Solutions to common problems
-
-### User-Friendly Design
-
-- **Progressive Disclosure**: Information organized from basic to advanced
-- **Code Examples**: Practical, runnable code snippets
-- **Visual Aids**: Diagrams and flowcharts where helpful
-- **Cross-Platform**: Instructions for Windows, macOS, and Linux
-
-### Maintenance
-
-- **Modular Structure**: Easy to update individual sections
-- **Consistent Formatting**: Standardized markdown formatting
-- **Version Tracking**: Git-based version control
-- **Community Contributions**: Easy for others to contribute
-
-## Content Guidelines
-
-### Writing Style
-
-- **Clear and Concise**: Easy to understand for users of all levels
-- **Action-Oriented**: Focus on what users need to do
-- **Example-Rich**: Provide practical examples for all concepts
-- **Error-Aware**: Include common pitfalls and solutions
-
-### Code Examples
-
-- **Complete**: All examples should be runnable
-- **Commented**: Include explanatory comments
-- **Realistic**: Use realistic data and scenarios
-- **Progressive**: Build from simple to complex examples
-
-### Maintenance Schedule
-
-- **Regular Updates**: Keep documentation current with code changes
-- **User Feedback**: Incorporate user suggestions and questions
-- **Link Checking**: Ensure all internal and external links work
-- **Example Testing**: Verify all code examples work correctly
-
-## Contributing to Documentation
-
-### How to Contribute
-
-1. **Identify Needs**:
-   - Missing information
-   - Unclear explanations
-   - Outdated examples
-   - Broken links
-
-2. **Make Changes**:
-   - Edit markdown files directly
-   - Follow existing formatting conventions
-   - Test all code examples
-   - Update cross-references as needed
-
-3. **Submit Changes**:
-   - Create pull request for main repository
-   - Or edit directly in GitHub Wiki
-   - Include clear description of changes
-
-### Style Guidelines
-
-- **Markdown**: Use standard GitHub-flavored markdown
-- **Headers**: Use hierarchical header structure (H1 > H2 > H3)
-- **Code Blocks**: Use appropriate language tags for syntax highlighting
-- **Links**: Use relative links for internal documentation
-- **Images**: Use SVG format when possible, store in `images/` subdirectory
-
-## Technical Details
-
-### File Organization
-
-```
-docs/
-├── README.md                    # This file
-├── _Sidebar.md                  # Wiki navigation
-├── Home.md                      # Main landing page
-├── Installation-Guide.md        # Installation instructions
-├── Quick-Start.md              # Getting started tutorial
-├── Cell3D-Objects.md           # Core objects documentation
-├── Data-Preprocessing.md       # Preprocessing tools
-├── Utilities.md                # Utility functions
-├── Analysis-Tools.md           # Analysis modules
-├── Visualization.md            # Visualization tools
-├── Command-Line-Interface.md   # CLI documentation
-├── API_DOCUMENTATION.md        # FastAPI interface
-└── Troubleshooting.md          # Problem solving
+# Install Python dependencies
+mamba create -n charmtools -c conda-forge -c bioconda python=3.10
+mamba activate charmtools
+mamba env update --file charmtools.yaml 
 ```
 
-### Dependencies
+## 📁 Module Descriptions
 
-- **GitHub Wiki**: For hosting and navigation
-- **Markdown**: For content formatting
-- **Git**: For version control
-- **GitHub**: For collaboration and hosting
+### Core Modules
 
-### Compatibility
+#### `charm_preprocess/` - Data Preprocessing
+- `clean_leg.py` - Clean promiscuous legs that contact with multiple legs
+- `clean_splicing.py` - Clean exon splicing from mRNA in contact files
+- `clean_isolated.py` - Clean isolated contact points
+- `sep_clean.py` - Separation cleaning tools
+- `clean3.py` - 3D structure cleaning
+- `tdg2pairs.py` - Convert 3DG files to pairs format
 
-- **GitHub Wiki**: Fully compatible
-- **GitLab Wiki**: Compatible with minor modifications
-- **Standalone**: Can be used with any markdown renderer
-- **PDF Export**: Can be converted to PDF using pandoc
+#### `obj/` - Core Objects
+- `Cell3D.py` - 3D cell object, main 3D genome data structure
+- `MultiCell3D.py` - Multi-cell 3D object
 
-## Support and Feedback
+#### `analysis/` - Analysis and Visualization
+- `regression.py` - Regression analysis models
+- `tss_enrichment.py` - TSS enrichment analysis
+- `spatialstat.py` - Spatial statistical analysis
+- `simpleDiff.py` - Simple differential analysis
+- `scGAD.py` - Single-cell GAD analysis
+- `scAB.py` - Single-cell AB analysis
+- `saddle.py` - Saddle point analysis
+- `plot.py` - Visualization and plotting tools
+- `peak_enrichment.py` - Peak enrichment analysis
+- `loop.py` - Loop analysis
+- `imputation.py` - Data imputation
+- `coverage.py` - Coverage analysis
+- `compartment.py` - Compartment analysis
+- `cellcycle.py` - Cell cycle analysis
+- `calc_escaping_score.py` - Escaping score calculation
+- `TAD.py` - TAD analysis
 
-### Getting Help
+#### `utils/` - Utility Tools
+- `CHARMio.py` - Input/output tools, core IO functionality
+- `pairs_manipulations.py` - Pairs file manipulation tools
+- `helper.py` - Helper functions
+- `generateColor2.py` - Color generation tools
 
-- **GitHub Issues**: Report documentation bugs or request improvements
-- **Discussions**: Ask questions about usage or contribute ideas
-- **Email**: Contact maintainers directly for urgent issues
+### Other Directories
+- `ref/` - Reference data
+- `Rlibs/` - R language libraries
+- `ref/mdso/` - MDSO (Multidimensional Scaling and Ordering) modules
+- `archieve/` - Archive files
 
-### Feedback Channels
+## 🤝 Contributing
 
-- **User Surveys**: Periodic surveys to gather user feedback
-- **Analytics**: Track page views and user behavior
-- **Issue Tracking**: Monitor and respond to user-reported problems
-- **Community Forums**: Engage with user community
+We welcome all forms of contributions!
+
+1. Fork this repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 📞 Contact
+
+- Project Homepage: [GitHub Repository](https://github.com/skelviper/CHARMtools)
+- Issue Tracker: [Issues](https://github.com/skelviper/CHARMtools/issues)
+- Email: skelviper@hotmail.com
 
 ---
 
-## Quick Start for Documentation Users
-
-1. **New Users**: Start with [Home.md](Home.md) → [Installation-Guide.md](Installation-Guide.md) → [Quick-Start.md](Quick-Start.md)
-2. **Developers**: Focus on [Cell3D-Objects.md](Cell3D-Objects.md) and [API_DOCUMENTATION.md](API_DOCUMENTATION.md)
-3. **System Administrators**: Review [Installation-Guide.md](Installation-Guide.md) and [Command-Line-Interface.md](Command-Line-Interface.md)
-4. **Troubleshooting**: Check [Troubleshooting.md](Troubleshooting.md) for common issues
-
----
-
-*This documentation is maintained by the CHARMtools development team. For questions or contributions, please visit our [GitHub repository](https://github.com/your-repo/CHARMtools).*
+**Note**: This is an actively developed project, and APIs may change. Please check the latest documentation for up-to-date information.
