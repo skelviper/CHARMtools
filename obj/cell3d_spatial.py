@@ -7,7 +7,10 @@ from sklearn.cluster import DBSCAN, KMeans
 from sklearn.neighbors import NearestNeighbors
 
 class Cell3DSpatial:
-    """Spatial analysis and clustering for Cell3D objects"""
+    """
+    Spatial analysis and clustering for Cell3D objects
+    基于结构计算各类统计信息。
+    """
     
     def calc_intermingling(self, chrom1, chrom2, radius=1.0):
         """Calculate intermingling between two chromosomes"""

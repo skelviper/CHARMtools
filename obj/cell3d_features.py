@@ -5,7 +5,10 @@ import numpy as np
 import pybedtools
 
 class Cell3DFeatures:
-    """Feature addition and management for Cell3D objects"""
+    """
+    Feature addition and management for Cell3D objects
+    给结构数据添加来自其他组学的信息。
+    """
     
     @staticmethod
     def _load_bed_fragments(path, resolution, type="allelic_resolved", peaks=None, flank=0, keep_3prime=True, merge_overlap=True):
