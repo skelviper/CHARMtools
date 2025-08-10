@@ -15,7 +15,7 @@ class Cell3DCore:
             self.tdg = self._load_tdg(tdg_path)
         elif type == "pairs":
             self.tdg = self._fdg_from_pairs(pairs_path)
-        self.record_size = len(self.tdg)
+        self.record_size = self.tdg.shape[0]
         self.resolution = resolution
         self.features = []
         self.kdtree = None
@@ -40,7 +40,15 @@ class Cell3DCore:
         if isinstance(tdg, pd.DataFrame):
             tdg = tdg.copy()
         elif isinstance(tdg, str):
-            tdg = pd.read_csv(tdg, sep="\t", header=None, comment="#")
+            import os
+            if not os.path.exists(tdg):
+                raise FileNotFoundError(f"TDG file not found: {tdg}")
+            try:
+                tdg = pd.read_csv(tdg, sep="\t", header=None, comment="#")
+                if tdg.empty:
+                    raise ValueError(f"TDG file is empty: {tdg}")
+            except Exception as e:
+                raise ValueError(f"Error reading TDG file {tdg}: {str(e)}")
         else:
             raise ValueError("tdg should be a pandas.DataFrame or a string")
         
@@ -56,6 +64,10 @@ class Cell3DCore:
         LE = LabelEncoder()
         tdg.chrom = pd.Categorical(tdg.chrom)
         tdg['chrom_code'] = LE.fit_transform(tdg['chrom'])
+        
+        # Update record_size after loading data
+        self.record_size = len(tdg)
+        
         return tdg
 
     def to_disk(self, on_disk_path=None):
@@ -98,8 +110,6 @@ class Cell3DCore:
 
     def get_data(self, genome_coord="", if_dense=False, rotate=False, rotate_x_angle=None, rotate_y_angle=None, rotate_z_angle=None):
         """Get the data of the Cell3D object."""
-        from .cell3d_utils import _auto_genome_coord
-        
         if genome_coord != "":
             chrom, start, end = _auto_genome_coord(genome_coord)
             if start is None:

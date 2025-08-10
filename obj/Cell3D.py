@@ -71,10 +71,14 @@ class Cell3D(Cell3DCore, Cell3DData, Cell3DFeatures, Cell3DSpatial,
         self.chrom_length = None
         self.expected = None
         self.hic_matrix = None
+        self.record_size = 0  # Initialize record_size
         
         # Load data if path provided
         if tdg_path is not None:
-            self._load_tdg(tdg_path)
+            self.tdg = self._load_tdg(tdg_path)
+            # Update record_size after loading data
+            if self.tdg is not None:
+                self.record_size = len(self.tdg)
             
             # Set cellname from filename if not provided
             if self.cellname is None:

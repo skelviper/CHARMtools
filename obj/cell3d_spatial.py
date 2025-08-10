@@ -113,10 +113,13 @@ class Cell3DSpatial:
         self.tdg['y'] = center_y + (self.tdg['y'] - center_y) * expansion_factor
         self.tdg['z'] = center_z + (self.tdg['z'] - center_z) * expansion_factor
 
-    def calc_radial_position(self, center=None):
+    def calc_radial_position(self, center=None, returnValue = False):
         """Calculate radial position of each point from center"""
         if self.on_disk:
             self.to_memory()
+        
+        if self.tdg is None:
+            raise ValueError("No 3D structure data available. Please ensure the tdg data is properly loaded.")
         
         if center is None:
             # Use center of mass as default center
@@ -136,7 +139,10 @@ class Cell3DSpatial:
         self.tdg['radial_position'] = radial_distances
         self.features.append('radial_position')
         
-        return radial_distances
+        if returnValue:
+            return radial_distances
+        else:
+            return None
 
     def feature_radial_distribution(self, feature_name, n_bins=10, center=None):
         """Calculate radial distribution of a feature"""

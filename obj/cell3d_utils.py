@@ -326,3 +326,27 @@ class Cell3DUtils:
             raise ValueError(f"Unsupported smoothing method: {method}")
         
         return smoothed_coords
+
+    def _auto_genome_coord(genome_coord):
+        """
+        Automatically convert genome_coord to chrom,start,end format
+        INPUT:
+            genome_coord: str, list, or tuple
+                Format like "chrom:start-end" or ["chrom", start, end] or "chrom"
+        OUTPUT:
+            chrom, start, end: tuple
+        """
+        import re
+        # determine the genome_coord format
+        if isinstance(genome_coord, str):
+            if ":" in genome_coord:
+                chrom, start, end = re.split(":|-", genome_coord)
+                start, end = int(start), int(end)
+            else:
+                chrom, start, end = genome_coord, None, None
+        elif isinstance(genome_coord, (list, tuple)):
+            chrom, start, end = genome_coord
+        else:
+            raise ValueError('Genome_coord should be str or list/tuple. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a"')
+        
+        return chrom, start, end
