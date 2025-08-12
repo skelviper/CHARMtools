@@ -108,6 +108,8 @@ class Cell3DCore:
         for key, value in self.metadata.items():
             print(f"  {key}: {value}") 
 
+        return ""
+
     def get_data(self, genome_coord="", if_dense=False, rotate=False, rotate_x_angle=None, rotate_y_angle=None, rotate_z_angle=None):
         """Get the data of the Cell3D object."""
         if genome_coord != "":

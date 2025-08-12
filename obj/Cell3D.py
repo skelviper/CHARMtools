@@ -86,19 +86,7 @@ class Cell3D(Cell3DCore, Cell3DData, Cell3DFeatures, Cell3DSpatial,
     
     def __repr__(self):
         """String representation of Cell3D object"""
-        if self.tdg is not None:
-            n_points = len(self.tdg)
-            n_chroms = self.tdg['chrom'].nunique() if 'chrom' in self.tdg.columns else 0
-            n_features = len(self.features)
-            
-            return (f"Cell3D(cellname='{self.cellname}', "
-                   f"resolution={self.resolution}, "
-                   f"n_points={n_points}, "
-                   f"n_chromosomes={n_chroms}, "
-                   f"n_features={n_features}, "
-                   f"on_disk={self.on_disk})")
-        else:
-            return f"Cell3D(cellname='{self.cellname}', empty=True)"
+        return self.get_info()
     
     def __len__(self):
         """Return number of genomic bins"""
