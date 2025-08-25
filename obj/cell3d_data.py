@@ -5,6 +5,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.spatial.distance import pdist, squareform
 from sklearn.neighbors import NearestNeighbors
+from ..utils.helper import parse_genome_coord
 
 class Cell3DData:
     """Data processing and retrieval for Cell3D objects"""
@@ -137,13 +138,42 @@ class Cell3DData:
         self.tdg[new_column_name] = aggregated_values
         self.features.append(new_column_name)
 
-    def calc_distance_matrix(self, metric='euclidean'):
-        """Calculate distance matrix between all points"""
+    def calc_distance_matrix(self, genome_coord=None, metric='euclidean'):
+        """Calculate distance matrix between points
+        
+        Parameters:
+            genome_coord: str, format like chrom:start-end or list/tuple of chrom,start,end.
+                         If provided, calculates distance matrix for specific genomic region.
+                         If None, calculates for all points using the metric parameter.
+            metric: str, distance metric for scipy.spatial.distance.pdist (default: 'euclidean')
+                   Only used when genome_coord is None.
+        
+        Returns:
+            distance_matrix: numpy array of pairwise distances
+        """
         if self.on_disk:
             self.to_memory()
         
-        coords = self.tdg[['x', 'y', 'z']].values
+        # If genome_coord is provided, filter data for that region
+        if genome_coord is not None:
+            coord_info = parse_genome_coord(genome_coord)
+            if coord_info is None:
+                raise ValueError(f"Invalid genome coordinate format: {genome_coord}")
+            
+            chrom, start, end = coord_info
+            
+            # Filter data for the specified genomic region
+            data_subset = self.tdg.query("chrom == @chrom & pos >= @start & pos <= @end").copy()
+            
+            if len(data_subset) == 0:
+                raise ValueError(f"No data found for genomic region: {genome_coord}")
+            
+            coords = data_subset[['x', 'y', 'z']].values
+        else:
+            # Use all points
+            coords = self.tdg[['x', 'y', 'z']].values
         
+        # Calculate distance matrix
         if metric == 'euclidean':
             distances = squareform(pdist(coords, metric='euclidean'))
         else:

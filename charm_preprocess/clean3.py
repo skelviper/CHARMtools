@@ -7,8 +7,8 @@ from utils.CHARMio import parse_pairs, parse_3dg, write_3dg
 
 def get_legs(pairs:pd.DataFrame)->pd.DataFrame:
     # get all legs of contacts
-    leg_list1 = pairs[["chr1", "pos1"]]
-    leg_list2 = pairs[["chr2", "pos2"]]
+    leg_list1 = pairs[["chrom1", "pos1"]]
+    leg_list2 = pairs[["chrom2", "pos2"]]
     leg_list1.columns = leg_list2.columns = ["chr","pos"]
     legs = pd.concat([leg_list1, leg_list2], ignore_index=True)
     #return legs

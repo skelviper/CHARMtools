@@ -189,32 +189,39 @@ class MultiCell3DVisualization:
         if adata_plot.n_vars == 0:
             raise ValueError("No variables left after facet filtering")
         
-        # 5. 计算分组均值
+        # 5. 计算分组均值 - 向量化重构版本
         X_plot = _get_X(adata_plot, layer)
         if sparse.issparse(X_plot):
             X_plot = X_plot.toarray()
         
-        # 按分组计算均值
-        group_means = []
-        groups_list = adata_plot.obs[group_by].unique()
+        # 创建包含数据和分组信息的DataFrame
+        data_df = pd.DataFrame(X_plot, index=adata_plot.obs.index)
+        data_df[group_by] = adata_plot.obs[group_by].values
         
-        for group in groups_list:
-            group_mask = adata_plot.obs[group_by] == group
-            group_data = X_plot[group_mask, :]
-            # 使用 nanmean 处理缺失值，而不是完全排除
-            group_mean = np.nanmean(group_data, axis=0)
-            
-            for i, mean_val in enumerate(group_mean):
-                # 只有当所有细胞都是NaN时才跳过，否则保留计算结果
-                if not np.isnan(mean_val):
-                    group_means.append({
-                        "group": group,
-                        facet_by: adata_plot.var.iloc[i][facet_by],
-                        "pos": adata_plot.var.iloc[i]["pos"],
-                        "mean": mean_val
-                    })
+        # 使用groupby进行向量化分组均值计算
+        group_means_matrix = data_df.groupby(group_by).apply(
+            lambda x: x.drop(columns=[group_by]).apply(lambda col: np.nanmean(col))
+        )
         
-        plot_df = pd.DataFrame(group_means)
+        # 构建结果DataFrame
+        plot_data = []
+        var_info = adata_plot.var[[facet_by, "pos"]].reset_index(drop=True)
+        
+        for group_name in group_means_matrix.index:
+            group_means = group_means_matrix.loc[group_name]
+            # 过滤掉NaN值
+            valid_mask = ~np.isnan(group_means)
+            if valid_mask.any():
+                valid_indices = np.where(valid_mask)[0]
+                group_data = pd.DataFrame({
+                    "group": group_name,
+                    facet_by: var_info.iloc[valid_indices][facet_by].values,
+                    "pos": var_info.iloc[valid_indices]["pos"].values,
+                    "mean": group_means.iloc[valid_indices].values
+                })
+                plot_data.append(group_data)
+        
+        plot_df = pd.concat(plot_data, ignore_index=True) if plot_data else pd.DataFrame()
         
         if plot_df.empty:
             raise ValueError("No valid data for plotting")

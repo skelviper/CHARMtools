@@ -77,12 +77,12 @@ def seg2pairs(file_path,mapq_threshold):
             mapq2 = int(last_col[5])
             
             rows.append({
-                'chr1': chr1, 'start1': start1, 'end1': end1,
-                'chr2': chr2, 'start2': start2, 'end2': end2,
+                'chrom1': chr1, 'start1': start1, 'end1': end1,
+                'chrom2': chr2, 'start2': start2, 'end2': end2,
                 'mapq1': mapq1, 'mapq2': mapq2
             })
             
-    columns = ['chr1', 'start1', 'end1', 'chr2', 'start2', 'end2', 'mapq1', 'mapq2']
+    columns = ['chrom1', 'start1', 'end1', 'chrom2', 'start2', 'end2', 'mapq1', 'mapq2']
     df = pd.DataFrame(rows, columns=columns)
     df=df.query('mapq1 > @mapq_threshold and mapq2 > @mapq_threshold').copy()
 
@@ -94,7 +94,7 @@ def seg2pairs(file_path,mapq_threshold):
     df["pos1"] = (df["start1"] + df["end1"]) // 2
     df["pos2"] = (df["start2"] + df["end2"]) // 2
 
-    df=df.sort_values(by=['chr1', 'pos1', 'chr2', 'pos2'])[['chr1', 'pos1', 'chr2', 'pos2']]
+    df=df.sort_values(by=['chrom1', 'pos1', 'chrom2', 'pos2'])[['chrom1', 'pos1', 'chrom2', 'pos2']]
     df.reset_index(drop=True, inplace=True)
 
     return df
@@ -111,15 +111,15 @@ def dedup_pairs(rawpairs:pd.DataFrame) -> pd.DataFrame:
     """
     rawpairs = rawpairs.copy()
     raw_pairs_num = rawpairs.shape[0]
-    # try chr1 or chrom1
-    if "chr1" in rawpairs.columns:
-        rawpairs["cluster1"] = rawpairs.groupby("chr1")["pos1"].transform(DBSCAN_wrapper)
-        rawpairs["cluster2"] = rawpairs.groupby("chr2")["pos2"].transform(DBSCAN_wrapper)
-        rawpairs = rawpairs.groupby(["chr1","cluster1","chr2","cluster2"]).head(n=1)
-    elif "chrom1" in rawpairs.columns:
+    # try chrom1 or chr1 (keeping backward compatibility)
+    if "chrom1" in rawpairs.columns:
         rawpairs["cluster1"] = rawpairs.groupby("chrom1")["pos1"].transform(DBSCAN_wrapper)
         rawpairs["cluster2"] = rawpairs.groupby("chrom2")["pos2"].transform(DBSCAN_wrapper)
         rawpairs = rawpairs.groupby(["chrom1","cluster1","chrom2","cluster2"]).head(n=1)
+    elif "chr1" in rawpairs.columns:
+        rawpairs["cluster1"] = rawpairs.groupby("chr1")["pos1"].transform(DBSCAN_wrapper)
+        rawpairs["cluster2"] = rawpairs.groupby("chr2")["pos2"].transform(DBSCAN_wrapper)
+        rawpairs = rawpairs.groupby(["chr1","cluster1","chr2","cluster2"]).head(n=1)
     rawpairs = rawpairs.drop(["cluster1","cluster2"], axis=1)
     dedup_pairs_num = rawpairs.shape[0]
     rate = 100*(raw_pairs_num-dedup_pairs_num)/raw_pairs_num
@@ -129,14 +129,14 @@ def dedup_pairs(rawpairs:pd.DataFrame) -> pd.DataFrame:
 def pairs2coverage(pairs, resolution=100000):
     # calculate type of each pair, if the two legs are on different chromosomes or abs(pos2-pos1) > 1000 append both legs,
     # else append the middle point of the two legs
-    cross_chrom_or_distant = (pairs['chr1'] != pairs['chr2']) | (np.abs(pairs['pos1'] - pairs['pos2']) > 1000)
+    cross_chrom_or_distant = (pairs['chrom1'] != pairs['chrom2']) | (np.abs(pairs['pos1'] - pairs['pos2']) > 1000)
     
-    chrom1_distant = pairs.loc[cross_chrom_or_distant, 'chr1']
+    chrom1_distant = pairs.loc[cross_chrom_or_distant, 'chrom1']
     pos1_distant = pairs.loc[cross_chrom_or_distant, 'pos1']
-    chrom2_distant = pairs.loc[cross_chrom_or_distant, 'chr2']
+    chrom2_distant = pairs.loc[cross_chrom_or_distant, 'chrom2']
     pos2_distant = pairs.loc[cross_chrom_or_distant, 'pos2']
     
-    chrom_middle = pairs.loc[~cross_chrom_or_distant, 'chr1']
+    chrom_middle = pairs.loc[~cross_chrom_or_distant, 'chrom1']
     pos_middle = ((pairs.loc[~cross_chrom_or_distant, 'pos1'] + pairs.loc[~cross_chrom_or_distant, 'pos2']) // 2)
 
     # merge craete DataFrame and calc coverage at given resolution

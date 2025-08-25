@@ -51,7 +51,7 @@ def parse_pairs(filename:str)->"Cell":
     compatible with all hickit originated pairs-like format 
     '''
     #comment lines are stored in dataframe.attrs["comment"]
-    name_array = "readID chr1 pos1 chr2 pos2 strand1 strand2 phase0 phase1 phase_prob00 phase_prob01 phase_prob10 phase_prob11".split()
+    name_array = "readID chrom1 pos1 chrom2 pos2 strand1 strand2 phase0 phase1 phase_prob00 phase_prob01 phase_prob10 phase_prob11".split()
     #read comment line
     with gzip.open(filename,"rt") as f:
         comments = []

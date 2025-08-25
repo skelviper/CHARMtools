@@ -20,8 +20,9 @@ def add_ap(data:pd.DataFrame, row_picker:pd.Series, col_picker:list, ap:str):
     data.loc[row_picker, col_picker].astype("string")
     data.loc[row_picker, col_picker] = data.loc[row_picker, col_picker].str.cat(ap)
 def rm_hap(data:pd.DataFrame):
-    data["chr1"] = data["chr1"].astype("string").str.extract(r'(chr[\dXY]+)')
-    data["chr2"] = data["chr2"].astype("string").str.extract(r'(chr[\dXY]+)')
+    # 第23-24行
+    data["chrom1"] = data["chrom1"].astype("string").str.extract(r'(chr[\dXY]+)')
+    data["chrom2"] = data["chrom2"].astype("string").str.extract(r'(chr[\dXY]+)')
     return data
 def sep_clean(pairs: pd.DataFrame, num_thread:int, up_dense:int, up_distance:int) -> tuple:
     # sep pairs haplotype and do clean isolated again
@@ -39,8 +40,8 @@ def sep_clean(pairs: pd.DataFrame, num_thread:int, up_dense:int, up_distance:int
         pairs.loc[row_picker, "phase1"] = code[1]
         hickit_frame = pd.concat([hickit_frame, pairs.loc[row_picker, :]])
         # set chr1 and chr2 column according to phase_probs, hickit_frame don't need this
-        add_ap(pairs, row_picker, "chr1", hap_word[code[0]])
-        add_ap(pairs, row_picker, "chr2", hap_word[code[1]])
+        add_ap(pairs, row_picker, "chrom1", hap_word[code[0]])
+        add_ap(pairs, row_picker, "chrom2", hap_word[code[1]])
         dip_frame = pd.concat([dip_frame, pairs.loc[row_picker, :]])
     dip_frame.attrs = hickit_frame.attrs = pairs.attrs
     dip_frame = clean_isolated(dip_frame, num_thread, up_dense, up_distance) # clean isolated contacts for newly generated chromosomes

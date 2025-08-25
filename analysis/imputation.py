@@ -281,7 +281,7 @@ def cell2csr_mat(cellMat:pd.DataFrame,chrAdder:pd.DataFrame,resolution:int) -> p
     """
     chrAdderDict = chrAdder.set_index('chr').to_dict()['adding']
  
-    cellMat['bin1abs'] = cellMat.apply(lambda row: math.floor((row.bin1 + chrAdderDict[row['chr1']])/resolution), axis=1)
-    cellMat['bin2abs'] = cellMat.apply(lambda row: math.floor((row.bin2 + chrAdderDict[row['chr2']])/resolution), axis=1)
+    cellMat['bin1abs'] = cellMat.apply(lambda row: math.floor((row.bin1 + chrAdderDict[row['chrom1']])/resolution), axis=1)
+    cellMat['bin2abs'] = cellMat.apply(lambda row: math.floor((row.bin2 + chrAdderDict[row['chrom2']])/resolution), axis=1)
 
     return cellMat[["bin1abs","bin2abs","normCount"]]

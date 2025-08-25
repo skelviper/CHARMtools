@@ -67,10 +67,10 @@ def clean_splicing(pairs:pd.DataFrame, ref:dict, thread:int)->pd.DataFrame:
     '''
     clean contacts from splicing
     '''
-    #intra = pairs.query('chr1 == chr2') # only search for intra
-    intra = pairs.loc[pairs['chr1'] == pairs['chr2']]
+    #intra = pairs.query('chrom1 == chrom2') # only search for intra
+    intra = pairs.loc[pairs['chrom1'] == pairs['chrom2']]
     working_func = partial(search_chromosome, ref=ref) # pool.map can't take multiple iterable as arguments
-    input_data = [(chromosome, per_chr_contacts) for chromosome, per_chr_contacts in intra.groupby("chr1")] # pool.map can't take additional keyword argument
+    input_data = [(chromosome, per_chr_contacts) for chromosome, per_chr_contacts in intra.groupby("chrom1")] # pool.map can't take additional keyword argument
     sys.stderr.write("CHARMtools::clean_splicing: input parsed, search in %d thread\n" % thread)
     # do multi-thread searching
     with futures.ProcessPoolExecutor(thread) as pool:

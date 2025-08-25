@@ -44,8 +44,16 @@ def clean_contacts_in_pair(contacts:"dataframe", up_dense, up_distance)->"datafr
     sorted_contacts = contacts.sort_values(by="pos1",axis=0,ignore_index=True)
     mask = contacts.apply(is_isolate, axis=1, sorted_contacts = sorted_contacts,
                           up_dense=up_dense, up_distance=up_distance)
-    sys.stderr.write("(%s, %s): %d --> %d\n" %(contacts.iloc[0]["chr1"], contacts.iloc[0]["chr2"], len(contacts),len(contacts[~mask])) )
-    return contacts[~mask]
+    sys.stderr.write("(%s, %s): %d --> %d\n" %(contacts.iloc[0]["chrom1"], contacts.iloc[0]["chrom2"], len(contacts),len(contacts[~mask])) )
+    input_data = ( value for key, value in pairs.groupby(["chrom1", "chrom2"]))
+    working_func = partial(clean_contacts_in_pair, up_dense=up_dense, up_distance=up_distance)
+    with futures.ProcessPoolExecutor(num_thread) as executor:
+        res = executor.map(working_func, input_data)
+    cleaned = pd.concat(res, axis=0)
+    cleaned.attrs = pairs.attrs # groupby don't keep attrs
+    print("clean_isolated: %d contacts removed in %s" % (len(pairs)-len(cleaned), pairs.attrs["name"]))
+    sys.stderr.write("clean_isolated: finished in %.2fs\n"%(time.time()-t0))
+    return cleaned
 def cli(args):
     filename, out_name, num_thread, up_dense, up_distance = \
         args.filename[0], args.output_file, args.thread, args.dense, args.distance

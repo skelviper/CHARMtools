@@ -12,7 +12,7 @@ from collections import namedtuple
 from utils.CHARMio import parse_pairs, write_pairs
 '''
 default 4DN .pairs format
-READID, chr1, pos1, chr2, pos2, STRAND1, STRAND2 = 0,1,2,3,4,5,6
+READID, chrom1, pos1, chrom2, pos2, STRAND1, STRAND2 = 0,1,2,3,4,5,6
 '''
 def is_leg_promiscuous(leg, sorted_legs:dict, max_distance, max_count):
     '''
@@ -30,7 +30,11 @@ def is_promiscuous(contact:"line", sorted_legs:dict, max_distance, max_count)->b
     tell if one contact is promiscuous
     '''
     Leg = namedtuple("Leg", "chr pos")
-    leg1, leg2 = Leg(contact["chr1"], contact["pos1"]), Leg(contact["chr2"], contact["pos2"])
+    # 第33行
+    leg1, leg2 = Leg(contact["chrom1"], contact["pos1"]), Leg(contact["chrom2"], contact["pos2"])
+    
+    # 第49-50行
+    left, right = pairs[["chrom1","pos1"]], pairs[["chrom2", "pos2"]]
     hit = partial(is_leg_promiscuous, sorted_legs=sorted_legs, max_distance=max_distance, max_count=max_count)
     return hit(leg1) or hit(leg2)
 def clean_promiscuous(contacts:"dataframe", sorted_legs:dict, thread:int, max_distance, max_count)->"dataframe":
