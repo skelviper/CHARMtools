@@ -271,3 +271,82 @@ class Cell3DSpatial:
             return volume
         
         raise ValueError(f"Unsupported volume calculation method: {method}")
+
+    def calc_structural_metrics(self):
+        """Calculate various structural metrics"""
+        if self.on_disk:
+            self.to_memory()
+        
+        coords = self.tdg[['x', 'y', 'z']].values
+        
+        metrics = {}
+        
+        # Center of mass
+        center_of_mass = np.mean(coords, axis=0)
+        metrics['center_of_mass'] = center_of_mass
+        
+        # Radius of gyration
+        rg = self.calc_radius_gyration()
+        metrics['radius_of_gyration'] = rg
+        
+        # Volume
+        try:
+            volume = self.calc_volume()
+            metrics['volume'] = volume
+        except Exception as e:
+            metrics['volume'] = f"Error: {str(e)}"
+        
+        # Coordinate ranges
+        metrics['coordinate_ranges'] = {
+            'x_range': np.ptp(coords[:, 0]),
+            'y_range': np.ptp(coords[:, 1]),
+            'z_range': np.ptp(coords[:, 2])
+        }
+        
+        # Density (points per unit volume)
+        try:
+            volume_val = metrics['volume']
+            if isinstance(volume_val, (int, float)):
+                metrics['density'] = len(coords) / volume_val
+        except:
+            pass
+        
+        return metrics
+    
+    def calc_chromosome_territories_metrics(self):
+        """Analyze chromosome territory organization"""
+        if self.on_disk:
+            self.to_memory()
+        
+        territory_analysis = {}
+        
+        for chrom in self.tdg['chrom'].unique():
+            chrom_data = self.tdg.query(f"chrom == '{chrom}'")[['x', 'y', 'z']].values
+            
+            if len(chrom_data) > 0:
+                # Territory center
+                territory_center = np.mean(chrom_data, axis=0)
+                
+                # Territory radius of gyration
+                distances_from_center = np.linalg.norm(chrom_data - territory_center, axis=1)
+                territory_rg = np.sqrt(np.mean(distances_from_center**2))
+                
+                # Territory volume (convex hull if possible)
+                try:
+                    from scipy.spatial import ConvexHull
+                    if len(chrom_data) >= 4:  # Minimum points for 3D convex hull
+                        hull = ConvexHull(chrom_data)
+                        territory_volume = hull.volume
+                    else:
+                        territory_volume = None
+                except ImportError:
+                    territory_volume = None
+                
+                territory_analysis[chrom] = {
+                    'center': territory_center,
+                    'radius_of_gyration': territory_rg,
+                    'volume': territory_volume,
+                    'n_points': len(chrom_data)
+                }
+        
+        return territory_analysis

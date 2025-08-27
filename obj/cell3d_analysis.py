@@ -3,7 +3,7 @@ import warnings
 import pandas as pd
 import numpy as np
 from scipy.stats import pearsonr, spearmanr
-from scipy.spatial.distance import pdist, squareform
+from ..utils.CHARMio import parse_pairs
 
 class Cell3DAnalysis:
     """Advanced analysis methods for Cell3D objects"""
@@ -135,46 +135,6 @@ class Cell3DAnalysis:
         warnings.warn("Matrix rotation not fully implemented")
         return hic_matrix
     
-    def plotDistanceMatrix(self, genome_coord=None, method='euclidean', 
-                          log_transform=False, figsize=(8, 6), save_path=None):
-        """Plot distance matrix with additional options"""
-        try:
-            import matplotlib.pyplot as plt
-        except ImportError:
-            raise ImportError("matplotlib is required for plotting")
-        
-        if self.on_disk:
-            self.to_memory()
-        
-        # Get data
-        if genome_coord is None:
-            plot_data = self.tdg.copy()
-        else:
-            plot_data = self.tdg.query(f"chrom == '{genome_coord}'").copy()
-        
-        # Calculate distance matrix
-        coords = plot_data[['x', 'y', 'z']].values
-        distances = squareform(pdist(coords, metric=method))
-        
-        if log_transform:
-            distances = np.log10(distances + 1e-10)
-        
-        # Create plot
-        fig, ax = plt.subplots(figsize=figsize)
-        
-        im = ax.imshow(distances, cmap='viridis', aspect='auto')
-        plt.colorbar(im, ax=ax, label='Distance')
-        
-        ax.set_title(f'Distance Matrix - {genome_coord or "All Chromosomes"}')
-        ax.set_xlabel('Genomic Position Index')
-        ax.set_ylabel('Genomic Position Index')
-        
-        if save_path:
-            plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        
-        plt.tight_layout()
-        return fig, ax
-    
     def compare_structures(self, other_cell3d, metrics=['rmsd', 'correlation'], 
                          features_to_compare=None):
         """Comprehensive comparison between two Cell3D structures"""
@@ -230,82 +190,33 @@ class Cell3DAnalysis:
             results['feature_correlations'] = feature_correlations
         
         return results
-    
-    def calculate_structural_metrics(self):
-        """Calculate various structural metrics"""
-        if self.on_disk:
-            self.to_memory()
-        
-        coords = self.tdg[['x', 'y', 'z']].values
-        
-        metrics = {}
-        
-        # Center of mass
-        center_of_mass = np.mean(coords, axis=0)
-        metrics['center_of_mass'] = center_of_mass
-        
-        # Radius of gyration
-        rg = self.calc_radius_gyration()
-        metrics['radius_of_gyration'] = rg
-        
-        # Volume
-        try:
-            volume = self.calc_volume()
-            metrics['volume'] = volume
-        except Exception as e:
-            metrics['volume'] = f"Error: {str(e)}"
-        
-        # Coordinate ranges
-        metrics['coordinate_ranges'] = {
-            'x_range': np.ptp(coords[:, 0]),
-            'y_range': np.ptp(coords[:, 1]),
-            'z_range': np.ptp(coords[:, 2])
-        }
-        
-        # Density (points per unit volume)
-        try:
-            volume_val = metrics['volume']
-            if isinstance(volume_val, (int, float)):
-                metrics['density'] = len(coords) / volume_val
-        except:
-            pass
-        
-        return metrics
-    
-    def analyze_chromosome_territories(self):
-        """Analyze chromosome territory organization"""
-        if self.on_disk:
-            self.to_memory()
-        
-        territory_analysis = {}
-        
-        for chrom in self.tdg['chrom'].unique():
-            chrom_data = self.tdg.query(f"chrom == '{chrom}'")[['x', 'y', 'z']].values
-            
-            if len(chrom_data) > 0:
-                # Territory center
-                territory_center = np.mean(chrom_data, axis=0)
-                
-                # Territory radius of gyration
-                distances_from_center = np.linalg.norm(chrom_data - territory_center, axis=1)
-                territory_rg = np.sqrt(np.mean(distances_from_center**2))
-                
-                # Territory volume (convex hull if possible)
-                try:
-                    from scipy.spatial import ConvexHull
-                    if len(chrom_data) >= 4:  # Minimum points for 3D convex hull
-                        hull = ConvexHull(chrom_data)
-                        territory_volume = hull.volume
-                    else:
-                        territory_volume = None
-                except ImportError:
-                    territory_volume = None
-                
-                territory_analysis[chrom] = {
-                    'center': territory_center,
-                    'radius_of_gyration': territory_rg,
-                    'volume': territory_volume,
-                    'n_points': len(chrom_data)
-                }
-        
-        return territory_analysis
+
+    def calc_pairs_3d_dist(self, pairs_path=None, print_stat=False):
+        """
+        calculate distance between sequenced contacts
+        """
+        if pairs_path is None:
+            pairs_path = self.pairs_path
+
+        pairs = parse_pairs(pairs_path)
+        num_pairs = pairs.shape[0]
+        pairs = pairs.query('phase0 != "." & phase1 != "."').reset_index(drop=True)
+        num_phased_pairs = pairs.shape[0]
+        pairs["chrom1"] = pairs["chrom1"] + pairs["phase0"].map({"0":"a","1":"b"})
+        pairs["chrom2"] = pairs["chrom2"] + pairs["phase1"].map({"0":"a","1":"b"})
+        pairs["pos1"] = (pairs["pos1"]//self.resolution)*self.resolution
+        pairs["pos2"] = (pairs["pos2"]//self.resolution)*self.resolution
+        points = self.get_data()
+        m1 = pairs.merge(points,left_on=["chrom1","pos1"],right_on=["chrom","pos"],how="left")
+        m2 = pairs.merge(points,left_on=["chrom2","pos2"],right_on=["chrom","pos"],how="left")
+        dist = np.sqrt((m1["x"]-m2["x"])**2+(m1["y"]-m2["y"])**2+(m1["z"]-m2["z"])**2)
+        pairs["dist"] = dist
+        pairs = pairs.dropna().reset_index(drop=True)
+        num_pairs_after = pairs.shape[0]
+
+        if print_stat:
+            print(f"Number of pairs before filtering: {num_pairs}")
+            print(f"Number of phased pairs: {num_phased_pairs}")
+            print(f"Number of pairs after filtering: {num_pairs_after}")
+
+        return pairs
