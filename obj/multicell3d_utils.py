@@ -19,30 +19,6 @@ def _parallel_concat(data, nproc=10):
     
     return final_result
 
-def _auto_genome_coord(genome_coord):
-    """
-    Automatically convert genome_coord to chrom,start,end format
-    INPUT:
-
-    OUTPUT:
-    """
-    # determine the genome_coord format
-    if isinstance(genome_coord, str):
-        if ":" in genome_coord:
-            chrom, start, end = re.split(":|-", genome_coord)
-            start, end = int(start), int(end)
-            mat_type = "region"
-        else:
-            chrom, start, end = genome_coord, None, None
-            mat_type = "chrom"
-    elif isinstance(genome_coord, (list, tuple)):
-        chrom, start, end = genome_coord
-        mat_type = "region"
-    else:
-        raise ValueError('Genome_coord should be str or list/tuple. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a"')
-    
-    return chrom, start, end
-
 def dev_only(func):
     """
     Decorator for development-only functions.

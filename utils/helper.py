@@ -7,41 +7,60 @@ def get_mem_size(obj):
     from pympler import asizeof
     return asizeof.asizeof(obj)
 
-def parse_genome_coord(coord: Optional[str]):
-    """解析基因组坐标字符串，返回 (chrom, start, end) 或 None
+def auto_genome_coord(genome_coord):
+    """
+    Automatically convert genome coordinate to chrom, start, end format.
+    
+    This function parses various genome coordinate formats and returns standardized
+    chromosome, start, and end values. It supports both region-based coordinates
+    (with start and end positions) and chromosome-only specifications.
     
     Parameters:
     -----------
-    coord : str, optional
-        基因组坐标字符串，支持格式：
-        - chr1:1000000-2000000 (区间)
-        - chr1:1000000 (单点)
-        - "" 或 None (返回None)
+    genome_coord : str, list, or tuple
+        Genome coordinate in one of the following formats:
+        - String with colon/hyphen separator: "chr1:10000-20000" or "chr1a:10000-20000"
+        - List or tuple: ["chr1a", 10000, 20000]
+        - Chromosome name only: "chr1a"
     
     Returns:
     --------
-    tuple or None
-        (chrom, start, end) 或 None
+    tuple
+        A tuple containing (chrom, start, end) where:
+        - chrom (str): Chromosome name
+        - start (int or None): Start position (None for chromosome-only input)
+        - end (int or None): End position (None for chromosome-only input)
+    
+    Raises:
+    -------
+    ValueError
+        If genome_coord is not in a supported format
     
     Examples:
     ---------
-    >>> parse_genome_coord("chr1:1000000-2000000")
-    ('chr1', 1000000, 2000000)
-    >>> parse_genome_coord("chr1:1000000")
-    ('chr1', 1000000, 1000000)
-    >>> parse_genome_coord("")
-    None
+    >>> auto_genome_coord("chr1:10000-20000")
+    ('chr1', 10000, 20000)
+    >>> auto_genome_coord(["chr1a", 10000, 20000])
+    ('chr1a', 10000, 20000)
+    >>> auto_genome_coord("chr1a")
+    ('chr1a', None, None)
     """
-    if not coord or coord.strip() == "":
-        return None
-    # 支持格式：chr1:1000000-2000000 或 chr1:1000000
-    match = re.match(r'^(chr[^:]+):(\d+)(?:-(\d+))?$', coord.strip())
-    if match:
-        chrom, start_str, end_str = match.groups()
-        start = int(start_str)
-        end = int(end_str) if end_str else start
-        return chrom, start, end
-    return None
+    # determine the genome_coord format
+    if isinstance(genome_coord, str):
+        if ":" in genome_coord:
+            chrom, start, end = re.split(":|-", genome_coord)
+            start, end = int(start), int(end)
+            mat_type = "region"
+        else:
+            chrom, start, end = genome_coord, None, None
+            mat_type = "chrom"
+    elif isinstance(genome_coord, (list, tuple)):
+        chrom, start, end = genome_coord
+        mat_type = "region"
+    else:
+        raise ValueError('Genome_coord should be str or list/tuple. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a"')
+    
+    return chrom, start, end
 
 def natural_chr_key(ch: str):
     """染色体自然排序的键函数

@@ -5,6 +5,7 @@ import numpy as np
 import copy
 import os
 from sklearn.preprocessing import LabelEncoder
+from ..utils.helper import auto_genome_coord
 
 class Cell3DCore:
     """Core functionality for Cell3D object including initialization and basic data operations"""
@@ -113,7 +114,7 @@ class Cell3DCore:
     def get_data(self, genome_coord="", if_dense=False, rotate=False, rotate_x_angle=None, rotate_y_angle=None, rotate_z_angle=None):
         """Get the data of the Cell3D object."""
         if genome_coord != "":
-            chrom, start, end = _auto_genome_coord(genome_coord)
+            chrom, start, end = auto_genome_coord(genome_coord)
             if start is None:
                 if self.on_disk:
                     conditions = f"(chrom == {chrom})"

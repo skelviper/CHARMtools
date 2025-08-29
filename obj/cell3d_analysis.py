@@ -90,16 +90,6 @@ class Cell3DAnalysis:
         
         return distances
     
-    def _auto_genome_coord(self, genome_coord_list=None):
-        """Automatically determine genome coordinates if not provided"""
-        if self.on_disk:
-            self.to_memory()
-        
-        if genome_coord_list is None:
-            genome_coord_list = sorted(self.tdg['chrom'].unique())
-        
-        return genome_coord_list
-    
     def mat_cor_with_na(self, matrix1, matrix2, method='pearson'):
         """Calculate correlation between two matrices handling NaN values"""
         # Flatten matrices and remove NaN pairs

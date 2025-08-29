@@ -3,8 +3,13 @@ import warnings
 import pandas as pd
 import numpy as np
 from io import StringIO
+import sys
+import time
+from scipy import spatial
+from utils.CHARMio import write_pairs
+from utils.pairs_manipulations import sortPairs
 
-class Cell3DOutput:
+class Cell3DIO:
     """Output format conversion for Cell3D objects"""
     
     def write_cif(self, output_path=None, cellname=None, tdg=None, resolution=None):
@@ -95,7 +100,113 @@ class Cell3DOutput:
             return None
         else:
             return cif_string
+
+    def write_tdg2pairs(self, output_path, distance=2):
+        """
+        Generate pairs from reconstructed 3D structures.
+        
+        Parameters:
+        -----------
+        output_path : str
+            Path to save the output pairs file.
+        distance : int, optional
+            Maximum distance between pairs in base pairs. Default is 2.
+        """
+        df3d = self.get_data()[["chrom", "pos", "x", "y", "z"]]
+
+        if self.kdtree is None:
+            self.kdtree = spatial.KDTree(df3d[["x","y","z"]].values)
+        kdtree = self.kdtree
+        res = np.array(list(kdtree.query_pairs(r=distance)))
+        if res.size == 0:
+            pairs_df = pd.DataFrame(columns=["readID","chrom1","pos1","chrom2","pos2","phase0","phase1"])
+        else:
+            chrom = df3d["chrom"].to_numpy()
+            pos = df3d["pos"].to_numpy()
+
+            def base_and_phase(c):
+                if isinstance(c, str) and len(c) > 0:
+                    last = c[-1]
+                    if last in ("a", "b"):
+                        return c[:-1], 0 if last == "a" else 1
+                return c, 0
+
+            rows = []
+            for i, j in res:
+                c1, ph1 = base_and_phase(chrom[i])
+                c2, ph2 = base_and_phase(chrom[j])
+                rows.append([".", c1, int(pos[i]), c2, int(pos[j]), ph1, ph2])
+            pairs_df = pd.DataFrame(rows, columns=["readID","chrom1","pos1","chrom2","pos2","phase0","phase1"])
+
+        pairs_df = sortPairs(pairs_df)
+
+        pairs_df.to_csv(output_path, index=False, header=None,sep="\t")
+        # write_pairs(pairs_df, output_path)
+
+        return None
+
     
+    def write_csv(self, output_path=None, cellname=None, tdg=None, include_features=True):
+        """Write Cell3D data to CSV format"""
+        if cellname is None:
+            cellname = self.cellname
+        if tdg is None:
+            if self.on_disk:
+                self.to_memory()
+            tdg = self.tdg
+        
+        # Sort by chromosome and position
+        tdg_sorted = tdg.sort_values(['chrom', 'pos']).reset_index(drop=True)
+        
+        if not include_features:
+            # Only include basic columns
+            columns_to_include = ['chrom', 'pos', 'x', 'y', 'z']
+            tdg_output = tdg_sorted[columns_to_include]
+        else:
+            tdg_output = tdg_sorted
+        
+        if output_path:
+            tdg_output.to_csv(output_path, index=False)
+            return None
+        else:
+            return tdg_output.to_csv(index=False)
+    
+    def export_summary(self, output_path=None):
+        """Export summary statistics of the Cell3D object"""
+        if self.on_disk:
+            self.to_memory()
+        
+        summary = {
+            'cellname': self.cellname,
+            'resolution': self.resolution,
+            'n_points': len(self.tdg),
+            'chromosomes': list(self.tdg['chrom'].unique()),
+            'n_chromosomes': self.tdg['chrom'].nunique(),
+            'features': self.features,
+            'n_features': len(self.features),
+            'coordinate_ranges': {
+                'x_min': self.tdg['x'].min(),
+                'x_max': self.tdg['x'].max(),
+                'y_min': self.tdg['y'].min(),
+                'y_max': self.tdg['y'].max(),
+                'z_min': self.tdg['z'].min(),
+                'z_max': self.tdg['z'].max()
+            }
+        }
+        
+        if hasattr(self, 'metadata') and self.metadata:
+            summary['metadata'] = self.metadata
+        
+        if output_path:
+            import json
+            with open(output_path, 'w') as f:
+                json.dump(summary, f, indent=2, default=str)
+            return None
+        else:
+            return summary
+
+
+    ## untested code below
     def write_pdb(self, output_path=None, cellname=None, tdg=None):
         """Write Cell3D data to PDB format"""
         if cellname is None:
@@ -192,61 +303,3 @@ class Cell3DOutput:
         else:
             return xyz_string
     
-    def write_csv(self, output_path=None, cellname=None, tdg=None, include_features=True):
-        """Write Cell3D data to CSV format"""
-        if cellname is None:
-            cellname = self.cellname
-        if tdg is None:
-            if self.on_disk:
-                self.to_memory()
-            tdg = self.tdg
-        
-        # Sort by chromosome and position
-        tdg_sorted = tdg.sort_values(['chrom', 'pos']).reset_index(drop=True)
-        
-        if not include_features:
-            # Only include basic columns
-            columns_to_include = ['chrom', 'pos', 'x', 'y', 'z']
-            tdg_output = tdg_sorted[columns_to_include]
-        else:
-            tdg_output = tdg_sorted
-        
-        if output_path:
-            tdg_output.to_csv(output_path, index=False)
-            return None
-        else:
-            return tdg_output.to_csv(index=False)
-    
-    def export_summary(self, output_path=None):
-        """Export summary statistics of the Cell3D object"""
-        if self.on_disk:
-            self.to_memory()
-        
-        summary = {
-            'cellname': self.cellname,
-            'resolution': self.resolution,
-            'n_points': len(self.tdg),
-            'chromosomes': list(self.tdg['chrom'].unique()),
-            'n_chromosomes': self.tdg['chrom'].nunique(),
-            'features': self.features,
-            'n_features': len(self.features),
-            'coordinate_ranges': {
-                'x_min': self.tdg['x'].min(),
-                'x_max': self.tdg['x'].max(),
-                'y_min': self.tdg['y'].min(),
-                'y_max': self.tdg['y'].max(),
-                'z_min': self.tdg['z'].min(),
-                'z_max': self.tdg['z'].max()
-            }
-        }
-        
-        if hasattr(self, 'metadata') and self.metadata:
-            summary['metadata'] = self.metadata
-        
-        if output_path:
-            import json
-            with open(output_path, 'w') as f:
-                json.dump(summary, f, indent=2, default=str)
-            return None
-        else:
-            return summary

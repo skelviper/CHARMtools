@@ -5,7 +5,7 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.spatial.distance import pdist, squareform
 from sklearn.neighbors import NearestNeighbors
-from ..utils.helper import parse_genome_coord
+from ..utils.helper import auto_genome_coord
 
 class Cell3DData:
     """Data processing and retrieval for Cell3D objects"""
@@ -156,7 +156,7 @@ class Cell3DData:
         
         # If genome_coord is provided, filter data for that region
         if genome_coord is not None:
-            coord_info = parse_genome_coord(genome_coord)
+            coord_info = auto_genome_coord(genome_coord)
             if coord_info is None:
                 raise ValueError(f"Invalid genome coordinate format: {genome_coord}")
             

@@ -8,6 +8,7 @@ import pybedtools
 from scipy import stats
 import re
 import warnings
+from utils.helper import auto_genome_coord
 
 # TODO：
 # 1. 3D inputation for feature
@@ -369,7 +370,7 @@ class Cell3D:
         OUTPUT:
             distance_matrix: symettrical distance matrix of the given region, np.array of shape (n,n)
         """
-        chrom,start,end = _auto_genome_coord(genome_coord)
+        chrom,start,end = auto_genome_coord(genome_coord)
 
         if start is None and self.chrom_length is None:
             raise ValueError("Running whole chromosome calculation with chrom_length is not available, |\
@@ -407,7 +408,7 @@ class Cell3D:
             feature_matrix: symettrical feature matrix of the given region, np.array of shape (n,n)
             feature_vec: np.array of shape (n,) indicating whether the feature is missing
         """
-        chrom,start,end = _auto_genome_coord(genome_coord)
+        chrom,start,end = auto_genome_coord(genome_coord)
         vec_size = (end-start-1) // self.resolution + 1
         feature_vec = np.zeros(vec_size)
         data = self.get_data(genome_coord)
@@ -441,7 +442,7 @@ class Cell3D:
         Returns:
             np.array : Proximity matrix
         """
-        chrom,start,end = _auto_genome_coord(genome_coord)
+        chrom,start,end = auto_genome_coord(genome_coord)
         vec_size = (end-start-1) // self.resolution + 1
         feature_vec = np.zeros(vec_size)
         data = self.get_data(genome_coord)
@@ -507,7 +508,7 @@ class Cell3D:
             pandas.DataFrame
         """
         if genome_coord != "":
-            chrom,start,end = _auto_genome_coord(genome_coord)
+            chrom,start,end = auto_genome_coord(genome_coord)
             if start is None:
                 tdg_temp = self.tdg.query("chrom == @chrom").copy()
             else:
@@ -652,7 +653,7 @@ class Cell3D:
                 "normal" or "rotate"
         """
         import matplotlib.pyplot as plt
-        chrom,start,end = _auto_genome_coord(genome_coord)
+        chrom,start,end = auto_genome_coord(genome_coord)
         mat = self.calc_distance_matrix(genome_coord)
         # extra params
         cmap = kwargs.get("cmap","YlOrRd")
@@ -1154,27 +1155,3 @@ def calc_volume(point_cloud,method="convexhull",alpha=0.2):
 
     else:
         raise ValueError("method should be alphashape or convexhull")
-
-def _auto_genome_coord(genome_coord):
-    """
-    Automatically convert genome_coord to chrom,start,end format
-    INPUT:
-
-    OUTPUT:
-    """
-    # determine the genome_coord format
-    if isinstance(genome_coord,str):
-        if ":" in genome_coord:
-            chrom,start,end = re.split(":|-",genome_coord)
-            start,end = int(start),int(end)
-            mat_type = "region"
-        else:
-            chrom,start,end = genome_coord,None,None
-            mat_type = "chrom"
-    elif isinstance(genome_coord,(list,tuple)):
-        chrom,start,end = genome_coord
-        mat_type = "region"
-    else:
-        raise ValueError('Genome_coord should be str or list/tuple. e.g. "chr1a:10000-20000" or ["chr1a",10000,20000] or "chr1a"')
-    
-    return chrom,start,end

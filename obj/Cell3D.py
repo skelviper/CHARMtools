@@ -11,14 +11,14 @@ from .cell3d_core import Cell3DCore
 from .cell3d_data import Cell3DData
 from .cell3d_features import Cell3DFeatures
 from .cell3d_spatial import Cell3DSpatial
-from .cell3d_output import Cell3DOutput
+from .cell3d_io import Cell3DIO
 from .cell3d_visualization import Cell3DVisualization
 from .cell3d_analysis import Cell3DAnalysis
 from .cell3d_utils import Cell3DUtils
 from .cell3d_dev import Cell3DDev
 
 class Cell3D(Cell3DCore, Cell3DData, Cell3DFeatures, Cell3DSpatial, 
-             Cell3DOutput, Cell3DVisualization, Cell3DAnalysis, 
+             Cell3DIO, Cell3DVisualization, Cell3DAnalysis, 
              Cell3DUtils, Cell3DDev):
     """
     Cell3D: A comprehensive class for 3D chromatin structure analysis
@@ -65,13 +65,16 @@ class Cell3D(Cell3DCore, Cell3DData, Cell3DFeatures, Cell3DSpatial,
         self.cellname = cellname
         self.resolution = resolution
         self.on_disk = on_disk
+        self.on_disk_path = kwargs.get('on_disk_path', None)
         self.features = []
         self.metadata = {}
+        self.extra = {}
         self.tdg = None
         self.chrom_length = None
         self.expected = None
         self.hic_matrix = None
-        self.record_size = 0  # Initialize record_size
+        self.kdtree = None 
+        self.record_size = 0  
         
         # Load data if path provided
         if tdg_path is not None:

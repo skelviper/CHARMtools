@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import tqdm
 import cooltools.lib.plotting
 import gzip
+import multiprocessing
+from tqdm import tqdm
 
 def _bedgraph_to_dense(bedgraph,chrom_sizes:str,resolution = 500):
     genome_intervals = _generate_genomic_intervals(chrom_sizes,resolution)
@@ -75,6 +77,18 @@ def _process_chunk(chunk,binsize,chrom_sizes):
     
 # CHARMio.parse_pairs
 # CHARMio.write_pairs
+
+def sortPairs(pairs:pd.DataFrame):
+    """
+    sort upper triangle matrix 4DN pairs file
+    """
+    pairs.columns = ["readid","chrom1","pos1","chrom2","pos2","phase0","phase1"]
+    pairs["pos1"] = pd.to_numeric( pairs["pos1"])
+    pairs["pos2"] = pd.to_numeric( pairs["pos2"])
+    pairs = pairs.sort_values(by=['chrom1', 'pos1', 'chrom2', 'pos2',"phase0","phase1"])
+    pairs = pairs.drop_duplicates(subset=['chrom1', 'pos1', 'chrom2', 'pos2',"phase0","phase1"], keep='first')
+    pairs = pairs.reset_index(drop=True)
+    return pairs
 
 def sort_pairs_in_parallel(combined_pairs,num_cores = None,keylist = ["chr1","pos1","chr2","pos2"]):
     if(num_cores is None):
@@ -206,10 +220,6 @@ def remove_regions_from_pairs(pairs_path_in,pairs_path_out,regions):
     pairs_write.attrs["comments"] = pairs.attrs["comments"]
     print("Percent of pairs removed: %.4f" % (1-len(pairs_write)/len(pairs)))
     CHARMio.write_pairs(pairs_write,pairs_path_out)
-
-
-import multiprocessing
-from tqdm import tqdm
 
 def process_bed_chunk(bed_chunk, bedgraph, flank, resolution):
     bedgraph_dict = bedgraph.groupby("chr")

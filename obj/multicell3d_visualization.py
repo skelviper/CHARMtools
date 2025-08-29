@@ -8,7 +8,7 @@ from scipy import sparse
 from pandas.api.types import CategoricalDtype
 
 # 从utils导入通用函数
-from ..utils.helper import parse_genome_coord, natural_chr_key
+from ..utils.helper import auto_genome_coord, natural_chr_key
 
 def _get_X(adata, layer):
     """获取 AnnData 的 X 或指定 layer"""
@@ -104,15 +104,12 @@ class MultiCell3DVisualization:
         matplotlib.figure.Figure
             创建的图形对象
         """
-        
-        # 获取 AnnData 对象
         adata = self.get_anndata(adata_name)
         
         # 1. 数据选择：基因组坐标过滤
-        coord_info = parse_genome_coord(genome_coord)
+        coord_info = auto_genome_coord(genome_coord)
         if coord_info:
             target_chrom, start_pos, end_pos = coord_info
-            # 过滤 var：染色体匹配 + 位置范围
             chrom_mask = adata.var[facet_by] == target_chrom
             if "pos" in adata.var.columns:
                 pos_mask = (adata.var["pos"] >= start_pos) & (adata.var["pos"] <= end_pos)

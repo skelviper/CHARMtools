@@ -7,7 +7,7 @@ from scipy import stats
 import warnings
 import anndata as ad
 from typing import List, Dict, Optional, Union, Tuple
-from .multicell3d_utils import _auto_genome_coord
+from ..utils.helper import auto_genome_coord
 
 class MultiCell3DCore:
     """

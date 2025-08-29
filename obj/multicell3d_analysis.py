@@ -4,7 +4,7 @@ import tqdm
 import concurrent.futures
 from functools import partial
 from scipy import stats
-from .multicell3d_utils import _auto_genome_coord
+from ..utils.helper import auto_genome_coord
 
 class MultiCell3DAnalysis:
     """
