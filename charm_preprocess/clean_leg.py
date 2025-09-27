@@ -30,11 +30,7 @@ def is_promiscuous(contact:"line", sorted_legs:dict, max_distance, max_count)->b
     tell if one contact is promiscuous
     '''
     Leg = namedtuple("Leg", "chr pos")
-    # 第33行
     leg1, leg2 = Leg(contact["chrom1"], contact["pos1"]), Leg(contact["chrom2"], contact["pos2"])
-    
-    # 第49-50行
-    left, right = pairs[["chrom1","pos1"]], pairs[["chrom2", "pos2"]]
     hit = partial(is_leg_promiscuous, sorted_legs=sorted_legs, max_distance=max_distance, max_count=max_count)
     return hit(leg1) or hit(leg2)
 def clean_promiscuous(contacts:"dataframe", sorted_legs:dict, thread:int, max_distance, max_count)->"dataframe":
@@ -52,7 +48,7 @@ def cli(args):
 def clean_leg(pairs, num_thread:int, max_distance:int, max_count:int):
     #merge left and right legs, hash by chromosome_names
     t0 = time.time()
-    left, right = pairs[["chr1","pos1"]], pairs[["chr2", "pos2"]]
+    left, right = pairs[["chrom1","pos1"]], pairs[["chrom2", "pos2"]]
     left.columns, right.columns = ("chr","pos"), ("chr","pos")
     all_legs = pd.concat((left,right), axis=0, ignore_index=True)
     sorted_legs = {key:value.sort_values(by="pos",axis=0,ignore_index=True) for key, value in all_legs.groupby("chr")}
