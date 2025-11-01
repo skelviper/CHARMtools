@@ -116,7 +116,7 @@ class Cell3DSpatial:
         self.tdg['y'] = center_y + (self.tdg['y'] - center_y) * expansion_factor
         self.tdg['z'] = center_z + (self.tdg['z'] - center_z) * expansion_factor
 
-    def calc_radial_position(self, center=None, returnValue = False):
+    def calc_radial_position(self, center=None, returnValue = False,if_rank = False):
         """Calculate radial position of each point from center"""
         if self.on_disk:
             self.to_memory()
@@ -140,6 +140,11 @@ class Cell3DSpatial:
         )
         
         self.tdg['radial_position'] = radial_distances
+        
+        if if_rank:
+            self.tdg['radial_position'] = self.tdg['radial_position'].rank(method='first')
+            self.tdg['radial_position'] = self.tdg['radial_position'] / self.tdg['radial_position'].max()
+
         self.features.append('radial_position')
         
         if returnValue:

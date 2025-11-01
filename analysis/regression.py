@@ -47,7 +47,7 @@ class GeneRegressor:
     def build_model(self, input_dim, alpha):
         return MultiFeatureRegression(input_dim, alpha, self.norm_type)
     
-    def train_test_model(self, X,y,epochs,test_size=0.2,lr=1e-3,batch_size=16,patience=None,celltype:list=None):
+    def train_test_model(self, X,y,epochs,test_size=0.2,lr=1e-3,batch_size=16,patience=None,celltype:list=None,correlation_metric='pearson'):
         if patience is None:
             patience = self.patience
         
@@ -99,8 +99,16 @@ class GeneRegressor:
                 val_pred = model(torch.FloatTensor(X_test)).squeeze()
                 val_pred_np = val_pred.numpy()
 
-                current_corr,current_pv = stats.pearsonr(val_pred.numpy(), y_test)
-                shuffle_corr,shuffle_pv = stats.pearsonr(np.random.permutation(val_pred.numpy()), y_test)
+                # current_corr,current_pv = stats.pearsonr(val_pred.numpy(), y_test)
+                # shuffle_corr,shuffle_pv = stats.pearsonr(np.random.permutation(val_pred.numpy()), y_test)
+                if correlation_metric == 'pearson':
+                    current_corr, current_pv = stats.pearsonr(val_pred_np, y_test)
+                    shuffle_corr, shuffle_pv = stats.pearsonr(np.random.permutation(val_pred_np), y_test)
+                elif correlation_metric == 'spearman':
+                    current_corr, current_pv = stats.spearmanr(val_pred_np, y_test)
+                    shuffle_corr, shuffle_pv = stats.spearmanr(np.random.permutation(val_pred_np), y_test)
+                else:
+                    raise ValueError(f"Unknown correlation metric: {correlation_metric}")
 
                 current_celltype_corr = np.nan 
                 current_celltype_pv = np.nan
@@ -113,7 +121,12 @@ class GeneRegressor:
                     })
                     pseudo_bulk = df.groupby('celltype').mean()
                     if len(pseudo_bulk) > 1:
-                        current_celltype_corr, current_celltype_pv = stats.pearsonr(pseudo_bulk['pred'], pseudo_bulk['true'])
+                        if correlation_metric == 'pearson':
+                            current_celltype_corr, current_celltype_pv = stats.pearsonr(pseudo_bulk['pred'], pseudo_bulk['true'])
+                        elif correlation_metric == 'spearman':
+                            current_celltype_corr, current_celltype_pv = stats.spearmanr(pseudo_bulk['pred'], pseudo_bulk['true'])
+                    else:
+                        current_celltype_corr, current_celltype_pv = np.nan, np.nan
 
             if current_corr > best_corr:
                 best_corr = current_corr

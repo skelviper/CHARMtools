@@ -5,6 +5,8 @@ import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.spatial.distance import pdist, squareform
 from sklearn.neighbors import NearestNeighbors
+from scipy.spatial import cKDTree
+from scipy.stats import rankdata
 from ..utils.helper import auto_genome_coord
 
 class Cell3DData:
@@ -97,46 +99,100 @@ class Cell3DData:
         self.tdg[column_name] = density
         self.features.append(column_name)
 
-    def add_feature_in_radius(self, feature_name, radius, new_column_name=None, aggregation='sum'):
-        """Add aggregated feature values within a radius for each point"""
+    # def add_feature_in_radius(self, feature_name, radius, new_column_name=None, aggregation='sum'):
+    #     """Add aggregated feature values within a radius for each point"""
+    #     if self.on_disk:
+    #         self.to_memory()
+        
+    #     if feature_name not in self.tdg.columns:
+    #         raise ValueError(f"Feature '{feature_name}' not found in data")
+        
+    #     if new_column_name is None:
+    #         new_column_name = f"{feature_name}_radius_{radius}"
+        
+    #     coords = self.tdg[['x', 'y', 'z']].values
+    #     feature_values = self.tdg[feature_name].values
+        
+    #     # Calculate pairwise distances
+    #     distances = squareform(pdist(coords))
+        
+    #     # For each point, find neighbors within radius and aggregate feature values
+    #     aggregated_values = []
+    #     for i in range(len(coords)):
+    #         neighbors_mask = distances[i] <= radius
+    #         neighbor_values = feature_values[neighbors_mask]
+            
+    #         if aggregation == 'sum':
+    #             agg_value = np.sum(neighbor_values)
+    #         elif aggregation == 'mean':
+    #             agg_value = np.mean(neighbor_values)
+    #         elif aggregation == 'max':
+    #             agg_value = np.max(neighbor_values)
+    #         elif aggregation == 'min':
+    #             agg_value = np.min(neighbor_values)
+    #         elif aggregation == 'count':
+    #             agg_value = len(neighbor_values)
+    #         else:
+    #             raise ValueError(f"Unsupported aggregation method: {aggregation}")
+            
+    #         aggregated_values.append(agg_value)
+        
+    #     self.tdg[new_column_name] = aggregated_values
+    #     self.features.append(new_column_name)
+
+    def add_feature_in_radius(self, feature, radius, aggregation="sum",
+                            include_self=True, rank=False, new_column_name=None,
+                            nan_policy="propagate"):
+        """
+        KDTree 半径聚合：支持 sum/mean/max/min/count，控制是否包含自身，可选秩归一化。
+        nan_policy: "propagate" | "omit"
+        """
+
         if self.on_disk:
             self.to_memory()
-        
-        if feature_name not in self.tdg.columns:
-            raise ValueError(f"Feature '{feature_name}' not found in data")
-        
-        if new_column_name is None:
-            new_column_name = f"{feature_name}_radius_{radius}"
-        
-        coords = self.tdg[['x', 'y', 'z']].values
-        feature_values = self.tdg[feature_name].values
-        
-        # Calculate pairwise distances
-        distances = squareform(pdist(coords))
-        
-        # For each point, find neighbors within radius and aggregate feature values
-        aggregated_values = []
-        for i in range(len(coords)):
-            neighbors_mask = distances[i] <= radius
-            neighbor_values = feature_values[neighbors_mask]
-            
-            if aggregation == 'sum':
-                agg_value = np.sum(neighbor_values)
-            elif aggregation == 'mean':
-                agg_value = np.mean(neighbor_values)
-            elif aggregation == 'max':
-                agg_value = np.max(neighbor_values)
-            elif aggregation == 'min':
-                agg_value = np.min(neighbor_values)
-            elif aggregation == 'count':
-                agg_value = len(neighbor_values)
+        if feature not in self.tdg.columns:
+            raise ValueError(f"Feature '{feature}' not found")
+
+        if not hasattr(self, "kdtree") or self.kdtree is None:
+            coords = self.tdg.filter(regex=r"^(x|y|z)$").values  # 或自定义坐标列
+            self.kdtree = cKDTree(coords)
+
+        indices_list = self.kdtree.query_ball_tree(self.kdtree, r=radius)
+
+        if not include_self:
+            indices_list = [[j for j in idxs if j != i] for i, idxs in enumerate(indices_list)]
+
+        s = self.tdg[feature]
+        vals = []
+        for idxs in indices_list:
+            if len(idxs) == 0:
+                group = s.iloc[idxs]  # 空
             else:
-                raise ValueError(f"Unsupported aggregation method: {aggregation}")
-            
-            aggregated_values.append(agg_value)
-        
-        self.tdg[new_column_name] = aggregated_values
-        self.features.append(new_column_name)
+                group = s.iloc[idxs]
+            if nan_policy == "omit":
+                group = group.dropna()
+
+            if aggregation == "sum":
+                vals.append(group.sum())
+            elif aggregation == "mean":
+                vals.append(group.mean())
+            elif aggregation == "max":
+                vals.append(group.max())
+            elif aggregation == "min":
+                vals.append(group.min())
+            elif aggregation == "count":
+                vals.append(len(group))
+            else:
+                raise ValueError("aggregation must be one of sum/mean/max/min/count")
+
+        if rank:
+            vals = rankdata(vals, nan_policy="omit") / float(np.isfinite(vals).sum())
+
+        col = new_column_name or f"{feature}_{aggregation}_in_radius_{radius}"
+        self.tdg[col] = vals
+        self.features.append(col)
+
+
 
     def calc_distance_matrix(self, genome_coord=None, metric='euclidean'):
         """Calculate distance matrix between points

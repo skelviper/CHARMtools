@@ -227,7 +227,7 @@ def readSingleCellCount(file):
     thisCellIntraCount = contactMatrix.query('chr1 == chr2')[['chr1','diag','count']].groupby(by = ['chr1','diag']).sum()
     return [thisCellIntraCount,thisCellInterCount]
 
-def generateBandnormFactor(filepath:list,ncpus=40) -> typing.Tuple[pd.DataFrame,int]:
+def generateBandnormFactor(filepath:list,ncpus=40):
     cellNum = len(filepath)
     totalCellInterCount = 0
     totalCellIntraCount = []
