@@ -12,94 +12,101 @@ from utils.pairs_manipulations import sortPairs
 class Cell3DIO:
     """Output format conversion for Cell3D objects"""
     
-    def write_cif(self, output_path=None, cellname=None, tdg=None, resolution=None):
-        """Write Cell3D data to CIF format"""
-        if cellname is None:
-            cellname = self.cellname
-        if tdg is None:
-            if self.on_disk:
-                self.to_memory()
-            tdg = self.tdg
-        if resolution is None:
-            resolution = self.resolution
-        
-        # Sort by chromosome and position
-        tdg_sorted = tdg.sort_values(['chrom', 'pos']).reset_index(drop=True)
-        
-        # Create CIF content
-        cif_content = StringIO()
-        
-        # Write header
-        cif_content.write(f"data_{cellname}\n")
-        cif_content.write("#\n")
-        cif_content.write(f"_cell.entry_id {cellname}\n")
-        cif_content.write(f"_cell.length_a {resolution}\n")
-        cif_content.write(f"_cell.length_b {resolution}\n")
-        cif_content.write(f"_cell.length_c {resolution}\n")
-        cif_content.write("_cell.angle_alpha 90.0\n")
-        cif_content.write("_cell.angle_beta 90.0\n")
-        cif_content.write("_cell.angle_gamma 90.0\n")
-        cif_content.write("#\n")
-        
-        # Write atom site loop
-        cif_content.write("loop_\n")
-        cif_content.write("_atom_site.group_PDB\n")
-        cif_content.write("_atom_site.id\n")
-        cif_content.write("_atom_site.type_symbol\n")
-        cif_content.write("_atom_site.label_atom_id\n")
-        cif_content.write("_atom_site.label_alt_id\n")
-        cif_content.write("_atom_site.label_comp_id\n")
-        cif_content.write("_atom_site.label_asym_id\n")
-        cif_content.write("_atom_site.label_entity_id\n")
-        cif_content.write("_atom_site.label_seq_id\n")
-        cif_content.write("_atom_site.pdbx_PDB_ins_code\n")
-        cif_content.write("_atom_site.Cartn_x\n")
-        cif_content.write("_atom_site.Cartn_y\n")
-        cif_content.write("_atom_site.Cartn_z\n")
-        cif_content.write("_atom_site.occupancy\n")
-        cif_content.write("_atom_site.B_iso_or_equiv\n")
-        cif_content.write("_atom_site.pdbx_formal_charge\n")
-        cif_content.write("_atom_site.auth_seq_id\n")
-        cif_content.write("_atom_site.auth_comp_id\n")
-        cif_content.write("_atom_site.auth_asym_id\n")
-        cif_content.write("_atom_site.auth_atom_id\n")
-        cif_content.write("_atom_site.pdbx_PDB_model_num\n")
-        
-        # Write atom data
-        for idx, row in tdg_sorted.iterrows():
-            chrom = row['chrom']
-            pos = row['pos']
-            x, y, z = row['x'], row['y'], row['z']
-            
-            # Extract chromosome number and allele
-            if chrom.endswith('a') or chrom.endswith('b'):
-                chrom_base = chrom[:-1]
-                allele = chrom[-1]
+    def write_cif(self,factor_b=None,output_path = None):
+        """
+        Convert a DataFrame of 3D coordinates to a CIF file.
+        Parameters:
+            cellname : str
+            tdg : pandas.DataFrame containing at least for 'chrom', 'pos', 'x', 'y', 'z', 'CpG'
+            outputpath : str
+            resolution : int
+        Returns:
+            None and a output file to outputpath
+        """
+
+        cellname = self.cellname
+        tdg = self.tdg
+        resolution = self.resolution
+
+        if factor_b is None:
+            if 'CpG' in tdg.columns:
+                factor_b = 'CpG'
             else:
-                chrom_base = chrom
-                allele = 'a'
-            
-            # Calculate sequence ID based on position and resolution
-            seq_id = int(pos // resolution) + 1
-            
-            # Default B-factor
-            b_factor = 20.0
-            
-            # Write atom line
-            cif_content.write(f"ATOM {idx+1:>5} C CA . BIN {allele.upper()} 1 {seq_id:>4} ? ")
-            cif_content.write(f"{x:>8.3f} {y:>8.3f} {z:>8.3f} 1.00 {b_factor:>6.2f} ? ")
-            cif_content.write(f"{seq_id:>4} BIN {allele.upper()} CA 1\n")
+                factor_b = 'pos'  # Default to 'pos' if 'CpG' is not available
+
+        if outputpath is None:
+            outputpath = "./" +cellname+".cif"
+
+        file_head_name ="data_" + cellname + "_res" + str(int(resolution/1000)) + "k"
+        # Create CIF format string block 1 
+        cif_str = "#\nloop_\n_entity_poly.entity_id\n_entity_poly.type\n_entity_poly.nstd_linkage\n_entity_poly.nstd_monomer\n_entity_poly.pdbx_seq_one_letter_code\n_entity_poly.pdbx_seq_one_letter_code_can\n_entity_poly.pdbx_strand_id\n_entity_poly.pdbx_target_identifier\n"
+        cif_str = file_head_name + "\n" + cif_str
+        # Get unique chroms
+        unique_chroms = tdg['chrom'].unique()
+        # Sort the array
+        def sort_chromosomes(chrom):
+            num_part = ''.join(filter(str.isdigit, chrom)) 
+            if 'X' in chrom:
+                num = 100  
+            elif 'Y' in chrom:
+                num = 101 
+            else:
+                num = int(num_part)
+            return (chrom[-1], num)  
         
-        # Get the final content
-        cif_string = cif_content.getvalue()
-        cif_content.close()
-        
-        if output_path:
-            with open(output_path, 'w') as f:
-                f.write(cif_string)
-            return None
-        else:
-            return cif_string
+        unique_chroms = sorted(unique_chroms, key=sort_chromosomes)
+        tdg["chrom"] = pd.Categorical(tdg["chrom"], categories=unique_chroms)
+        # Add each chrom as a new line in the CIF block
+        for i, chrom in enumerate(unique_chroms, start=1):
+            cif_str += f"{i} 'Chromatin' no no ? ? ? ?\n"
+
+
+        # Create CIF format string for the second block
+        cif_str2 = "#\nloop_\n_entity.id\n_entity.type\n_entity.src_method\n_entity.pdbx_description\n_entity.formula_weight\n_entity.pdbx_number_of_molecules\n_entity.pdbx_ec\n_entity.pdbx_mutation\n_entity.pdbx_fragment\n_entity.details\n"
+
+        # Add each chrom as a new line in the CIF block
+        for i, chrom in enumerate(unique_chroms, start=1):
+            # Determine if the chrom is maternal or paternal
+            chrom_type = 'maternal' if 'a' in chrom else 'paternal'
+            # Get the chrom number
+            chrom_num = ''.join(filter(str.isdigit, chrom))
+            if 'X' in chrom:
+                chrom_num = 'X'
+            elif 'Y' in chrom:
+                chrom_num = 'Y'
+            cif_str2 += f"{i} polymer man 'Chromosome{chrom_num} ({chrom_type})' ? ? ? ? ? ?\n"
+
+        #print(cif_str2)
+
+        # Continue from previous code
+
+        # Create CIF format string for the third block
+        cif_str3 = "#\nloop_\n_atom_site.group_PDB\n_atom_site.id\n_atom_site.type_symbol\n_atom_site.label_atom_id\n_atom_site.label_alt_id\n_atom_site.label_comp_id\n_atom_site.label_asym_id\n_atom_site.label_entity_id\n_atom_site.label_seq_id\n_atom_site.pdbx_PDB_ins_code\n_atom_site.Cartn_x\n_atom_site.Cartn_y\n_atom_site.Cartn_z\n_atom_site.B_iso_or_equiv\n"
+
+        # Create a dictionary to store the current index for each chrom
+        chrom_indices = {chrom: 0 for chrom in unique_chroms}
+
+        # Add each row of the DataFrame as a new line in the CIF block
+        for i, row in tdg.iterrows():
+            # Get the current index for this chrom
+            chrom_index = chrom_indices[row['chrom']] + 1
+            # Update the index for this chrom
+            chrom_indices[row['chrom']] = chrom_index
+            # Get the entity id for this chrom
+            entity_id = unique_chroms.index(row['chrom']) + 1
+            cif_str3 += f"ATOM {i+1} C CA . GLY {row['chrom']} {entity_id} {chrom_index} ? {row['x']} {row['y']} {row['z']} {row[factor_b]}\n"
+
+        #print(cif_str3)
+
+        # Open the file in write mode
+        with open(output_path, 'w') as f:
+            # Write the three blocks to the file
+            f.write(cif_str)
+            f.write(cif_str2)
+            f.write(cif_str3)
+
+        print("Done " + cellname)
+        return None
 
     def write_tdg2pairs(self, output_path, distance=2):
         """
