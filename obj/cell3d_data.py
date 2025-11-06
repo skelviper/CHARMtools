@@ -12,15 +12,25 @@ from ..utils.helper import auto_genome_coord
 class Cell3DData:
     """Data processing and retrieval for Cell3D objects"""
     
-    @staticmethod
-    def _sparse_to_dense(sparse_matrix, shape):
-        """Convert sparse matrix to dense format"""
-        dense_matrix = np.full(shape, np.nan)
-        for i, j, value in zip(sparse_matrix['i'], sparse_matrix['j'], sparse_matrix['data']):
-            dense_matrix[i, j] = value
-            if i != j:  # Make symmetric
-                dense_matrix[j, i] = value
-        return dense_matrix
+    def _sparse_to_dense(self,genome_coord,sparse_df):
+        chrom,start,end = auto_genome_coord(genome_coord)
+
+        if start is None:
+            start = 0
+        if end is None:
+            if self.chrom_length is None:
+                raise ValueError("Chrom length is not available, please run add_chrom_length first")
+            end = self.chrom_length.set_index("chrom").to_dict()["size"][chrom]
+
+        positions = np.arange(start,end,self.resolution)
+        dense_df = pd.DataFrame(positions,columns=['pos'])
+        sparse_df['pos'] = sparse_df['pos'].astype(int)
+        dense_df = pd.merge(dense_df, sparse_df, on='pos', how='left')
+        dense_df['chrom'] = chrom
+
+        columns_order = ['chrom', 'pos'] + [col for col in dense_df.columns if col not in ['chrom', 'pos']]
+        dense_df = dense_df[columns_order]
+        return dense_df
 
     def get_data(self, genome_coord=None, if_dense=False, if_sort=True):
         """Get data from the Cell3D object"""
@@ -34,13 +44,9 @@ class Cell3DData:
         
         if if_sort:
             df = df.sort_values(["chrom", "pos"])
-        
-        if if_dense and hasattr(self, 'hic_matrix') and self.hic_matrix is not None:
-            # Convert sparse HiC matrix to dense if requested
-            if genome_coord:
-                chrom_indices = df.index.tolist()
-                dense_hic = self._sparse_to_dense(self.hic_matrix, (len(self.tdg), len(self.tdg)))
-                df['hic_dense'] = [dense_hic[i] for i in chrom_indices]
+
+        if if_dense:
+            df = self._sparse_to_dense(genome_coord, df)
         
         return df
 
