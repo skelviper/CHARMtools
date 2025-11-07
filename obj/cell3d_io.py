@@ -37,8 +37,8 @@ class Cell3DIO:
             else:
                 factor_b = 'pos'  # Default to 'pos' if 'CpG' is not available
 
-        if outputpath is None:
-            outputpath = "./" +cellname+".cif"
+        if output_path is None:
+            output_path = "./" +cellname+".cif"
 
         file_head_name ="data_" + cellname + "_res" + str(int(resolution/1000)) + "k"
         # Create CIF format string block 1 
