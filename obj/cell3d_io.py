@@ -119,6 +119,9 @@ class Cell3DIO:
         distance : int, optional
             Maximum distance between pairs in base pairs. Default is 2.
         """
+        if self.chrom_length is None:
+                raise ValueError("Chrom length is not available, please run add_chrom_length first")
+
         df3d = self.get_data()[["chrom", "pos", "x", "y", "z"]]
 
         if self.kdtree is None:
@@ -145,9 +148,41 @@ class Cell3DIO:
                 rows.append([".", c1, int(pos[i]), c2, int(pos[j]), ph1, ph2])
             pairs_df = pd.DataFrame(rows, columns=["readID","chrom1","pos1","chrom2","pos2","phase0","phase1"])
 
+        pairs_df['strand1'] = '+'
+        pairs_df['strand2'] = '+'
+        pairs_df = pairs_df[["readID","chrom1","pos1","chrom2","pos2","strand1","strand2","phase0","phase1"]]
         pairs_df = sortPairs(pairs_df)
 
-        pairs_df.to_csv(output_path, index=False, header=None,sep="\t")
+        #add phasing probability
+        pairs_df["phase_prob00"] = np.where((pairs_df["phase0"]==0) & (pairs_df["phase1"]==0) ,float(1),float(0))
+        pairs_df["phase_prob01"] = np.where((pairs_df["phase0"]==0) & (pairs_df["phase1"]==1) ,float(1),float(0))
+        pairs_df["phase_prob10"] = np.where((pairs_df["phase0"]==1) & (pairs_df["phase1"]==0) ,float(1),float(0))
+        pairs_df["phase_prob11"] = np.where((pairs_df["phase0"]==1) & (pairs_df["phase1"]==1) ,float(1),float(0))
+
+
+        # add header to pairs_df
+        chrom_df = self.chrom_length.copy()
+        chrom_df['chrom'] = chrom_df['chrom'].str[:-1]
+        chrom_df = chrom_df.drop_duplicates().reset_index(drop=True)
+        chrom_header = list('#chromosome: ' + chrom_df['chrom'].astype(str) + ' ' + chrom_df['size'].astype(str))
+        header = [
+            '## pairs format v1.0',
+            '#sorted: chr1-chr2-pos1-pos2',
+            '#shape: upper triangle'
+        ] + chrom_header + ['#columns: readID\tchr1\tpos1\tchr2\tpos2\tstrand1\tstrand2\tphase0\tphase1\tphase_prob00\tphase_prob01\tphase_prob10\tphase_prob11']
+
+        if output_path.endswith('.gz'):
+            import gzip
+            with gzip.open(output_path, "wt") as f:
+                for line in header:
+                    f.write(line + "\n")
+                pairs_df.to_csv(f, index=False, header=False, sep="\t")
+        else:
+            with open(output_path, "w") as f:
+                for line in header:
+                    f.write(line + "\n")
+                pairs_df.to_csv(f, index=False, header=False, sep="\t")
+
         # write_pairs(pairs_df, output_path)
 
         return None

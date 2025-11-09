@@ -82,7 +82,7 @@ def sortPairs(pairs:pd.DataFrame):
     """
     sort upper triangle matrix 4DN pairs file
     """
-    pairs.columns = ["readid","chrom1","pos1","chrom2","pos2","phase0","phase1"]
+    # pairs.columns = ["readid","chrom1","pos1","chrom2","pos2","phase0","phase1"]
     pairs["pos1"] = pd.to_numeric( pairs["pos1"])
     pairs["pos2"] = pd.to_numeric( pairs["pos2"])
     pairs = pairs.sort_values(by=['chrom1', 'pos1', 'chrom2', 'pos2',"phase0","phase1"])
