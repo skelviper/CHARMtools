@@ -8,6 +8,9 @@ import time
 from scipy import spatial
 from utils.CHARMio import write_pairs
 from utils.pairs_manipulations import sortPairs
+import subprocess
+import shlex
+import io
 
 class Cell3DIO:
     """Output format conversion for Cell3D objects"""
@@ -108,7 +111,7 @@ class Cell3DIO:
         print("Done " + cellname)
         return None
 
-    def write_tdg2pairs(self, output_path, distance=2):
+    def write_tdg2pairs(self, output_path, distance=2, mark_pat_mat=True):
         """
         Generate pairs from reconstructed 3D structures.
         
@@ -159,6 +162,10 @@ class Cell3DIO:
         pairs_df["phase_prob10"] = np.where((pairs_df["phase0"]==1) & (pairs_df["phase1"]==0) ,float(1),float(0))
         pairs_df["phase_prob11"] = np.where((pairs_df["phase0"]==1) & (pairs_df["phase1"]==1) ,float(1),float(0))
 
+        if mark_pat_mat:
+            # rename chrom
+            pairs_df['chrom1'] = pairs_df['chrom1'] + np.where(pairs_df['phase0']==0, '(pat)', '(mat)')
+            pairs_df['chrom2'] = pairs_df['chrom2'] + np.where(pairs_df['phase1']==0, '(pat)', '(mat)')
 
         # add header to pairs_df
         chrom_df = self.chrom_length.copy()
@@ -171,17 +178,21 @@ class Cell3DIO:
             '#shape: upper triangle'
         ] + chrom_header + ['#columns: readID\tchr1\tpos1\tchr2\tpos2\tstrand1\tstrand2\tphase0\tphase1\tphase_prob00\tphase_prob01\tphase_prob10\tphase_prob11']
 
-        if output_path.endswith('.gz'):
-            import gzip
-            with gzip.open(output_path, "wt") as f:
-                for line in header:
-                    f.write(line + "\n")
-                pairs_df.to_csv(f, index=False, header=False, sep="\t")
+        if isinstance(output_path, io.StringIO):  # if output_path is a StringIO buffer
+            output_path.write("\n".join(header) + "\n")
+            pairs_df.to_csv(output_path, index=False, header=False, sep="\t")
         else:
-            with open(output_path, "w") as f:
-                for line in header:
-                    f.write(line + "\n")
-                pairs_df.to_csv(f, index=False, header=False, sep="\t")
+            if output_path.endswith('.gz'):
+                import gzip
+                with gzip.open(output_path, "wt") as f:
+                    for line in header:
+                        f.write(line + "\n")
+                    pairs_df.to_csv(f, index=False, header=False, sep="\t")
+            else:
+                with open(output_path, "w") as f:
+                    for line in header:
+                        f.write(line + "\n")
+                    pairs_df.to_csv(f, index=False, header=False, sep="\t")
 
         # write_pairs(pairs_df, output_path)
 
@@ -345,3 +356,48 @@ class Cell3DIO:
         else:
             return xyz_string
     
+    def reconstruct_3dg(self,hickit_command,distance=2):
+        """
+        Reconstruct 3D genome from pairs under a distance threshold.
+        hickit_command: str, command line arguments for hickit, do not include "-i" and input file.
+        distance: float, distance threshold to define pairs.
+        clean3: bool, whether to clean up incorrect structure.
+        """
+        # Create an in-memory buffer (instead of writing to a file)
+        pairs_buffer = io.StringIO()
+        self.write_tdg2pairs(output_path=pairs_buffer, distance=distance, mark_pat_mat=False)
+        pairs_buffer.seek(0)
+
+        # run hickit command
+        command = ["/shared/jliu/unnamed/structureReconGPU/hickit/hickit", 
+               "-i", "-"]  # "-" indicates reading from stdin
+        parsed_command = shlex.split(hickit_command)
+        command.extend(parsed_command)
+
+        try:
+            subprocess.run(command, input=pairs_buffer.read(), text=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error occurred while running hickit: {e}")
+
+        pairs_buffer.close()
+        return None
+        
+    
+    def clean3(self,tdg_file_path, pair_path, clean_3dg_path,distance=2):
+        """
+        Clean up incorrect 3D structure based on distance consistency
+        """
+        self.write_tdg2pairs(output_path=pair_path, distance=distance, mark_pat_mat=True)
+        
+        import subprocess
+        command = [
+            'python', '/shared/jliu/unnamed/github/CHARMtools/CHARMtools.py', 'clean3',
+            '-r', pair_path, '-i', tdg_file_path, '-o', clean_3dg_path
+        ]
+        
+        try:
+            subprocess.run(command, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error occurred while running clean3: {e}")
+        
+        return None

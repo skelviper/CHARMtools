@@ -225,7 +225,10 @@ class Cell3DData:
             chrom, start, end = coord_info
             
             # Filter data for the specified genomic region
-            data_subset = self.tdg.query("chrom == @chrom & pos >= @start & pos <= @end").copy()
+            if start is None:
+                data_subset = self.tdg.query("chrom == @chrom").copy()
+            else:
+                data_subset = self.tdg.query("chrom == @chrom & pos >= @start & pos <= @end").copy()
             
             if len(data_subset) == 0:
                 raise ValueError(f"No data found for genomic region: {genome_coord}")

@@ -10,7 +10,7 @@ class Cell3DVisualization:
     
     def plot3D(self, feature=None, genome_coord=None, smooth=False, smooth_sigma=1.0, 
                color_map='viridis', point_size=50, alpha=0.7, figsize=(10, 8), 
-               title=None, save_path=None, show_axes=True, background_color='white'):
+               title=None, save_path=None, show_axes=True, background_color='white',ax=None):
         """Create 3D scatter plot of the chromatin structure"""
         try:
             import matplotlib.pyplot as plt
@@ -76,8 +76,13 @@ class Cell3DVisualization:
                 warnings.warn(f"Smoothing failed: {e}. Using original colors.")
         
         # Create the plot
-        fig = plt.figure(figsize=figsize)
-        ax = fig.add_subplot(111, projection='3d')
+        # fig = plt.figure(figsize=figsize)
+        # ax = fig.add_subplot(111, projection='3d')
+        if ax is None:
+            fig = plt.figure(figsize=figsize)
+            ax = fig.add_subplot(111, projection='3d')
+        else:
+            fig = ax.figure
         
         # Set background color
         ax.xaxis.pane.fill = False
@@ -94,7 +99,8 @@ class Cell3DVisualization:
         
         # Add colorbar
         if feature is not None:
-            cbar = plt.colorbar(scatter, ax=ax, shrink=0.5, aspect=20)
+            # cbar = plt.colorbar(scatter, ax=ax, shrink=0.5, aspect=20)
+            cbar = fig.colorbar(scatter, ax=ax, shrink=0.5, aspect=20)
             cbar.set_label(color_label)
         
         # Set labels and title
@@ -127,7 +133,7 @@ class Cell3DVisualization:
         
         plt.tight_layout()
         return fig, ax
-    
+        
     def plot_distance_matrix(self, genome_coord=None, method='euclidean', figsize=(8, 6), 
                            color_map='viridis', title=None, save_path=None):
         """Plot distance matrix heatmap"""
