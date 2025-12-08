@@ -26,6 +26,7 @@ class Cell3DCore:
         self.metadata = {}
         self.extra = {}
         self.expected = None
+        self.pairs_path = pairs_path
 
         if on_disk:
             self.to_disk(on_disk_path)

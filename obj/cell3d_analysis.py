@@ -183,10 +183,13 @@ class Cell3DAnalysis:
 
     def calc_pairs_3d_dist(self, pairs_path=None, print_stat=False):
         """
-        calculate distance between sequenced contacts
+        calculate distance between sequenced contacts, take 4DN standard pairs file as input
         """
         if pairs_path is None:
-            pairs_path = self.pairs_path
+            if self.pairs_path is None:
+                raise ValueError("pairs_path must be provided if not set in the Cell3D object")
+            else:
+                pairs_path = self.pairs_path
 
         pairs = parse_pairs(pairs_path)
         num_pairs = pairs.shape[0]
