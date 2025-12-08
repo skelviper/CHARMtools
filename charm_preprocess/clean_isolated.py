@@ -7,7 +7,7 @@ from functools import partial
 import pandas as pd
 import numpy as np
 
-from utils.CHARMio import parse_pairs, write_pairs
+from ..utils.CHARMio import parse_pairs, write_pairs
 
 def L_half(contact1, contact2):
     '''

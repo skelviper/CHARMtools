@@ -4,7 +4,8 @@ import gzip
 import os
 from pkgutil import get_data
 from io import StringIO
-import ref
+# import ref
+from .. import ref
 from functools import partial
 
 import re

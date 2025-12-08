@@ -7,7 +7,7 @@ import pandas as pd
 import re
 
 
-from utils.CHARMio import parse_pairs, parse_gtf, write_pairs
+from ..utils.CHARMio import parse_pairs, parse_gtf, write_pairs
 
 def cli(args)->int:
     filename, gtf_file, out_name, thread = \

@@ -6,8 +6,8 @@ from io import StringIO
 import sys
 import time
 from scipy import spatial
-from utils.CHARMio import write_pairs
-from utils.pairs_manipulations import sortPairs
+from ..utils.CHARMio import write_pairs
+from ..utils.pairs_manipulations import sortPairs
 import subprocess
 import shlex
 import io

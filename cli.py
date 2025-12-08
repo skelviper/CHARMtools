@@ -1,12 +1,12 @@
 import argparse
 
-from charm_preprocess import clean_leg
-from charm_preprocess import clean_splicing
-from charm_preprocess import clean_isolated
-from charm_preprocess import sep_clean
-from charm_preprocess import clean3
-from charm_preprocess import tdg2cif
-from charm_preprocess import tdg2pairs
+from .charm_preprocess import clean_leg
+from .charm_preprocess import clean_splicing
+from .charm_preprocess import clean_isolated
+from .charm_preprocess import sep_clean
+from .charm_preprocess import clean3
+from .charm_preprocess import tdg2cif
+from .charm_preprocess import tdg2pairs
 
 def cli():
     parser = argparse.ArgumentParser(prog="CHARMtools", description="Functions for data-analysis in HiRES etc. projects")

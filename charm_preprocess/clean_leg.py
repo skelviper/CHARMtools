@@ -9,7 +9,7 @@ from concurrent import futures
 from functools import partial
 from collections import namedtuple
 
-from utils.CHARMio import parse_pairs, write_pairs
+from ..utils.CHARMio import parse_pairs, write_pairs
 '''
 default 4DN .pairs format
 READID, chrom1, pos1, chrom2, pos2, STRAND1, STRAND2 = 0,1,2,3,4,5,6

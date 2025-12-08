@@ -5,8 +5,8 @@
 import sys
 import pandas as pd
 import argparse
-from utils.CHARMio import parse_3dg
-from obj.Cell3D import Cell3D
+from ..utils.CHARMio import parse_3dg
+from ..obj.Cell3D import Cell3D
 
 def cli(args):
     """
