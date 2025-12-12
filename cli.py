@@ -1,12 +1,22 @@
 import argparse
+import importlib
 
-from .charm_preprocess import clean_leg
-from .charm_preprocess import clean_splicing
-from .charm_preprocess import clean_isolated
-from .charm_preprocess import sep_clean
-from .charm_preprocess import clean3
-from .charm_preprocess import tdg2cif
-from .charm_preprocess import tdg2pairs
+_PKG = __package__ or "CHARMtools"
+
+def _pre(modname: str) -> str:
+    return f"{_PKG}.charm_preprocess.{modname}"
+
+def _lazy_cli(subcmd: str, modpath: str, func: str = "cli"):
+    def _run(args):
+        try:
+            # 关键：永远传 package，彻底杜绝你现在这种 TypeError
+            mod = importlib.import_module(modpath, package=_PKG)
+        except ModuleNotFoundError as e:
+            if e.name == modpath:
+                raise SystemExit(f"[{subcmd}] 找不到模块: {modpath}")
+            raise SystemExit(f"[{subcmd}] 缺少依赖: {e.name}（仅该子命令需要）")
+        return getattr(mod, func)(args)
+    return _run
 
 def cli():
     parser = argparse.ArgumentParser(prog="CHARMtools", description="Functions for data-analysis in HiRES etc. projects")
@@ -15,7 +25,7 @@ def cli():
     clean_leg_arg = subcommands.add_parser(
                             "clean_leg",
                             help="clean promiscuous legs that contacts with multiple legs")
-    clean_leg_arg.set_defaults(handle=clean_leg.cli)
+    clean_leg_arg.set_defaults(handle=_lazy_cli("clean_leg", _pre("CHARMtools.charm_preprocess.clean_leg")))
     clean_leg_arg.add_argument(
                             dest="filename",
                             metavar="INPUT_FILE",
@@ -54,7 +64,7 @@ def cli():
     clean_splicing_arg = subcommands.add_parser(
                             "clean_splicing", 
                             help="clean exon splicing from mRNA in contact file")
-    clean_splicing_arg.set_defaults(handle=clean_splicing.cli)
+    clean_splicing_arg.set_defaults(handle=_lazy_cli("clean_splicing", "CHARMtools.charm_preprocess.clean_splicing"))
     clean_splicing_arg.add_argument(
                             dest="filename",
                             metavar="INPUT_FILE",
@@ -87,7 +97,7 @@ def cli():
                             "clean3",
                             help="clean 3dg particles poorly supported by contacts"
     )
-    clean3_arg.set_defaults(handle=clean3.cli)
+    clean3_arg.set_defaults(handle=_lazy_cli("clean3", "CHARMtools.charm_preprocess.clean3"))
     clean3_arg.add_argument(
                             "-i","--input",
                             dest="filename",
@@ -134,7 +144,7 @@ def cli():
                             "clean_isolated",
                             help="remove isolated contacts according to L-0.5 distance"
     )
-    clean_isolated_arg.set_defaults(handle=clean_isolated.cli)
+    clean_isolated_arg.set_defaults(handle=_lazy_cli("clean_isolated", "CHARMtools.charm_preprocess.clean_isolated"))
     clean_isolated_arg.add_argument(
                             dest="filename",
                             metavar="INPUT_FILE",
@@ -177,7 +187,7 @@ def cli():
                                 generate one more hickit compatible output file.\
                                     works with hickit imputed pairs file"
     )
-    sep_clean_arg.set_defaults(handle=sep_clean.cli)
+    sep_clean_arg.set_defaults(handle=_lazy_cli("sep_clean", "CHARMtools.charm_preprocess.sep_clean"))
     sep_clean_arg.add_argument(
                             dest="filename",
                             metavar="INPUT_FILE",
@@ -223,7 +233,7 @@ def cli():
                             "tdg2cif",  
                             help="convert 3dg file to cif file"
     )
-    tdg2cif_arg.set_defaults(handle=tdg2cif.cli)
+    tdg2cif_arg.set_defaults(handle=_lazy_cli("tdg2cif", "CHARMtools.charm_preprocess.tdg2cif"))
     tdg2cif_arg.add_argument(
                             "-i","--input",
                             dest="input_file",
@@ -269,7 +279,7 @@ def cli():
                             "tdg2pairs",
                             help="convert 3dg file to pairs file"
     )
-    tdg2pairs_arg.set_defaults(handle=tdg2pairs.cli)
+    tdg2pairs_arg.set_defaults(handle=_lazy_cli("tdg2pairs", "CHARMtools.charm_preprocess.tdg2pairs"))
     tdg2pairs_arg.add_argument(
                             "-i", "--input",
                             dest="input_file",
