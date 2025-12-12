@@ -9,7 +9,6 @@ def _pre(modname: str) -> str:
 def _lazy_cli(subcmd: str, modpath: str, func: str = "cli"):
     def _run(args):
         try:
-            # 关键：永远传 package，彻底杜绝你现在这种 TypeError
             mod = importlib.import_module(modpath, package=_PKG)
         except ModuleNotFoundError as e:
             if e.name == modpath:
