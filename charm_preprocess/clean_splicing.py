@@ -1,10 +1,10 @@
 import sys
 import time
-import gzip
 from concurrent import futures
 from functools import partial
 import pandas as pd
 import re
+import numpy as np
 
 
 from ..utils.CHARMio import parse_pairs, parse_gtf, write_pairs
@@ -47,37 +47,75 @@ def build_in_memory_index(exons:pd.DataFrame) -> dict:
         ref_dict[chromosome] = by_chr_table.drop(["start","end","seqname"],axis=1)
     sys.stderr.write("CHARMtools::clean_splicing: index done.\n")
     return ref_dict
-def legs_co_gene(contact:pd.Series, chromosome:str, ref_dict:dict)->bool:
-    # whether two legs of contacts are in same gene's exon
-    # must be intra contacts
-    pos1, pos2 = contact["pos1"], contact["pos2"]
-    result = ref_dict[chromosome][ref_dict[chromosome].index.contains(pos1)]
-    if len(result[result.index.contains(pos2)]) > 0:
-        return True
-    else:
-        return False
-def search_chromosome(contacts_at_chromosome:tuple, ref:dict)->pd.DataFrame:
-    # search whole chromosome using F::legs_co_gene
-    # single chr searching for multi-process calling
-    chromosome, contacts = contacts_at_chromosome[0], contacts_at_chromosome[1]
-    hit_index = contacts.apply(legs_co_gene, chromosome=chromosome, ref_dict=ref, axis=1)
-    return contacts[hit_index]
+
+
+def _build_interval_cache(ref_dict: dict) -> dict:
+    """
+    Prepare start positions and prefix max ends per chromosome for fast interval lookup.
+    """
+    cache = {}
+    for chromosome, table in ref_dict.items():
+        if table.empty:
+            continue
+        starts = table.index.left.to_numpy()
+        ends = table.index.right.to_numpy()
+        order = np.argsort(starts, kind="mergesort")
+        starts = starts[order]
+        ends = ends[order]
+        prefix_end = np.maximum.accumulate(ends)
+        cache[chromosome] = (starts, prefix_end)
+    return cache
+
+
+def _search_chromosome_cached(item: tuple, cache: dict) -> pd.DataFrame:
+    """
+    Find contacts whose two legs fall into the same exon on a chromosome.
+    Interval membership matches the original IntervalIndex.contains logic
+    (open on the left, closed on the right).
+    """
+    chromosome, contacts = item
+    if contacts.empty:
+        return contacts
+    interval_cache = cache.get(chromosome)
+    if interval_cache is None:
+        return contacts.iloc[0:0]
+    starts, prefix_end = interval_cache
+    pos1 = contacts["pos1"].to_numpy()
+    pos2 = contacts["pos2"].to_numpy()
+    pos_min = np.minimum(pos1, pos2)
+    pos_max = np.maximum(pos1, pos2)
+    idx = np.searchsorted(starts, pos_min, side="left") - 1
+    valid = idx >= 0
+    if not np.any(valid):
+        return contacts.iloc[0:0]
+    safe_idx = np.where(valid, idx, 0)
+    start_at_idx = starts[safe_idx]
+    end_at_idx = prefix_end[safe_idx]
+    hits = valid & (pos_min > start_at_idx) & (pos_max <= end_at_idx)
+    return contacts.loc[hits]
+
 
 def clean_splicing(pairs:pd.DataFrame, ref:dict, thread:int)->pd.DataFrame:
     '''
     clean contacts from splicing
     '''
+    t0 = time.time()
     #intra = pairs.query('chrom1 == chrom2') # only search for intra
     intra = pairs.loc[pairs['chrom1'] == pairs['chrom2']]
-    working_func = partial(search_chromosome, ref=ref) # pool.map can't take multiple iterable as arguments
-    input_data = [(chromosome, per_chr_contacts) for chromosome, per_chr_contacts in intra.groupby("chrom1")] # pool.map can't take additional keyword argument
+    interval_cache = _build_interval_cache(ref)
+    input_data = [(chromosome, per_chr_contacts) for chromosome, per_chr_contacts in intra.groupby("chrom1", sort=False)]
     sys.stderr.write("CHARMtools::clean_splicing: input parsed, search in %d thread\n" % thread)
-    # do multi-thread searching
-    with futures.ProcessPoolExecutor(thread) as pool:
-        res = pool.map(working_func, input_data)
-    result = pd.concat(res, axis=0) # contained contacts
+    working_func = partial(_search_chromosome_cached, cache=interval_cache)
+    if thread > 1:
+        with futures.ThreadPoolExecutor(thread) as pool:
+            result_groups = list(pool.map(working_func, input_data))
+    else:
+        result_groups = [working_func(item) for item in input_data]
+    result = pd.concat(result_groups, axis=0) if len(result_groups) > 0 else intra.iloc[0:0]
     cleaned = pairs.drop(result.index, axis=0) # clean contacts
+    cleaned.attrs.update(pairs.attrs)
     print("clean_splicing: %d contacts removed in %s\n" %(len(result), pairs.attrs["name"]) )
+    sys.stderr.write("clean_splicing: finished in %.2fs\n" % (time.time() - t0))
     return cleaned
 
 def get_exon_rab(gtf:pd.DataFrame) -> pd.DataFrame:

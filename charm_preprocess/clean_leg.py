@@ -2,70 +2,76 @@ import pandas as pd
 import numpy as np
 import sys
 import time
-import gzip
-import bisect
-import argparse
 from concurrent import futures
 from functools import partial
-from collections import namedtuple
 
 from ..utils.CHARMio import parse_pairs, write_pairs
-'''
-default 4DN .pairs format
-READID, chrom1, pos1, chrom2, pos2, STRAND1, STRAND2 = 0,1,2,3,4,5,6
-'''
-def is_leg_promiscuous(leg, sorted_legs:dict, max_distance, max_count):
-    '''
-    tell if one leg is promiscuous
-    using Tan's phantom leg method
-    '''
-    this_chromosome = sorted_legs[leg.chr]
-    left_end = bisect.bisect_left(this_chromosome["pos"], leg.pos - max_distance)
-    right_stretch = left_end + max_count
-    if right_stretch >= len(this_chromosome):
-        return False
-    return this_chromosome.iloc[right_stretch]["pos"] - leg.pos <= max_distance 
-def is_promiscuous(contact:"line", sorted_legs:dict, max_distance, max_count)->bool:
-    '''
-    tell if one contact is promiscuous
-    '''
-    Leg = namedtuple("Leg", "chr pos")
-    leg1, leg2 = Leg(contact["chrom1"], contact["pos1"]), Leg(contact["chrom2"], contact["pos2"])
-    hit = partial(is_leg_promiscuous, sorted_legs=sorted_legs, max_distance=max_distance, max_count=max_count)
-    return hit(leg1) or hit(leg2)
-def clean_promiscuous(contacts:"dataframe", sorted_legs:dict, thread:int, max_distance, max_count)->"dataframe":
-    #wrapper for multi-thread processing
-    mask = contacts.apply(is_promiscuous, axis=1, sorted_legs=sorted_legs, max_distance=max_distance, max_count=max_count)
-    sys.stderr.write("clean_leg: 1/%d chunk done\n"%thread)
-    return contacts[~mask]
+
+
+def _promiscuous_flags_for_group(item, sorted_positions_by_chrom, max_distance, max_count):
+    chrom, pos_series = item
+    sorted_all = sorted_positions_by_chrom.get(chrom)
+    if sorted_all is None or sorted_all.size == 0:
+        return pos_series.index.to_numpy(), np.zeros(pos_series.shape[0], dtype=bool)
+    positions = pos_series.to_numpy()
+    left_idx = np.searchsorted(sorted_all, positions - max_distance, side="left")
+    candidate_idx = left_idx + max_count
+    flags = np.zeros(positions.shape[0], dtype=bool)
+    in_bounds = candidate_idx < sorted_all.shape[0]
+    flags[in_bounds] = (sorted_all[candidate_idx[in_bounds]] - positions[in_bounds]) <= max_distance
+    return pos_series.index.to_numpy(), flags
+
+
+def _promiscuous_mask_for_column(pairs, chrom_col, pos_col, sorted_positions_by_chrom, max_distance, max_count, num_thread):
+    groups = [(chrom, group[pos_col]) for chrom, group in pairs.groupby(chrom_col, sort=False)]
+    mask = np.zeros(len(pairs), dtype=bool)
+    worker = partial(
+        _promiscuous_flags_for_group,
+        sorted_positions_by_chrom=sorted_positions_by_chrom,
+        max_distance=max_distance,
+        max_count=max_count,
+    )
+    if num_thread > 1:
+        with futures.ThreadPoolExecutor(max_workers=num_thread) as executor:
+            for idxs, flags in executor.map(worker, groups):
+                mask[idxs] = flags
+    else:
+        for item in groups:
+            idxs, flags = worker(item)
+            mask[idxs] = flags
+    return pd.Series(mask, index=pairs.index, dtype=bool)
+
+
 def cli(args):
     in_name, num_thread, out_name, max_distance, max_count = \
         args.filename[0], args.thread, args.out_name, args.max_distance, args.max_count
     pairs = parse_pairs(in_name)
     res = clean_leg(pairs, num_thread, max_distance, max_count)
     write_pairs(res, out_name)
-    
-def clean_leg(pairs, num_thread:int, max_distance:int, max_count:int):
-    #merge left and right legs, hash by chromosome_names
+
+
+def clean_leg(pairs, num_thread: int, max_distance: int, max_count: int):
     t0 = time.time()
-    left, right = pairs[["chrom1","pos1"]], pairs[["chrom2", "pos2"]]
-    left.columns, right.columns = ("chr","pos"), ("chr","pos")
-    all_legs = pd.concat((left,right), axis=0, ignore_index=True)
-    sorted_legs = {key:value.sort_values(by="pos",axis=0,ignore_index=True) for key, value in all_legs.groupby("chr")}
-    sys.stderr.write("clean_leg: group sort in %.2fs\n"%(time.time()-t0))
-    #multithread filtering
-    t0=time.time()
-    input_data = np.array_split(pairs, num_thread, axis=0)
-    working_func = partial(clean_promiscuous, sorted_legs=sorted_legs, 
-                           thread=num_thread, max_distance=max_distance, max_count=max_count)
-    with futures.ProcessPoolExecutor(num_thread) as executor:
-        res = executor.map(working_func, input_data)
-    result = pd.concat(res, axis=0)
-    # adding comment back cause pd doesn't ensure attr intact
-    # hires_io will take care of headers of attrs
+    t_sort = time.time()
+    left = pairs[["chrom1", "pos1"]].copy()
+    right = pairs[["chrom2", "pos2"]].copy()
+    left.columns, right.columns = ("chr", "pos"), ("chr", "pos")
+    all_legs = pd.concat((left, right), axis=0, ignore_index=True)
+    sorted_positions_by_chrom = {
+        key: np.sort(value["pos"].to_numpy())
+        for key, value in all_legs.groupby("chr", sort=False)
+    }
+    sys.stderr.write("clean_leg: group sort in %.2fs\n" % (time.time() - t_sort))
+    left_mask = _promiscuous_mask_for_column(
+        pairs, "chrom1", "pos1", sorted_positions_by_chrom, max_distance, max_count, num_thread
+    )
+    right_mask = _promiscuous_mask_for_column(
+        pairs, "chrom2", "pos2", sorted_positions_by_chrom, max_distance, max_count, num_thread
+    )
+    mask = left_mask | right_mask
+    result = pairs.loc[~mask].copy()
     result.attrs.update(pairs.attrs)
-    print("clean_leg: remove %d contacts in %s\n"%(len(pairs)-len(result), pairs.attrs["name"]))
-    sys.stderr.write("clean_leg: finished in %.2fs\n"%(time.time()-t0))
+    print("clean_leg: remove %d contacts in %s\n" % (len(pairs) - len(result), pairs.attrs["name"]))
+    sys.stderr.write("clean_leg: finished in %.2fs\n" % (time.time() - t0))
     return result
 
-    

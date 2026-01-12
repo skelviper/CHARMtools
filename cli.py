@@ -24,7 +24,7 @@ def cli():
     clean_leg_arg = subcommands.add_parser(
                             "clean_leg",
                             help="clean promiscuous legs that contacts with multiple legs")
-    clean_leg_arg.set_defaults(handle=_lazy_cli("clean_leg", _pre("CHARMtools.charm_preprocess.clean_leg")))
+    clean_leg_arg.set_defaults(handle=_lazy_cli("clean_leg", _pre("clean_leg")))
     clean_leg_arg.add_argument(
                             dest="filename",
                             metavar="INPUT_FILE",
@@ -63,7 +63,7 @@ def cli():
     clean_splicing_arg = subcommands.add_parser(
                             "clean_splicing", 
                             help="clean exon splicing from mRNA in contact file")
-    clean_splicing_arg.set_defaults(handle=_lazy_cli("clean_splicing", "CHARMtools.charm_preprocess.clean_splicing"))
+    clean_splicing_arg.set_defaults(handle=_lazy_cli("clean_splicing", _pre("clean_splicing")))
     clean_splicing_arg.add_argument(
                             dest="filename",
                             metavar="INPUT_FILE",
@@ -143,7 +143,7 @@ def cli():
                             "clean_isolated",
                             help="remove isolated contacts according to L-0.5 distance"
     )
-    clean_isolated_arg.set_defaults(handle=_lazy_cli("clean_isolated", "CHARMtools.charm_preprocess.clean_isolated"))
+    clean_isolated_arg.set_defaults(handle=_lazy_cli("clean_isolated", _pre("clean_isolated")))
     clean_isolated_arg.add_argument(
                             dest="filename",
                             metavar="INPUT_FILE",
