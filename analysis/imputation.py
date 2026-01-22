@@ -83,8 +83,10 @@ def schicluster_imputation_for_mat(mat,alpha=0.05,kernel_size=3,sigma=2,if_convo
         # add if since snapHi-C did not convolve the matrix
         mat = ndimage.convolve(mat, gauss_kernel_2d, mode='constant', cval=0.0)
 
-    np.fill_diagonal(mat[1:,:-1], mat[1:,:-1] + 1)
-    np.fill_diagonal(mat[:-1,1:], mat[:-1,1:] + 1)
+    # fill second diagonal, second + 1 diagonal
+    mat.diagonal(-1)[:] += 1
+    mat.diagonal(1)[:] += 1
+
     # mat to stochastic matrix
     mat = mat / np.nansum(mat, axis = 0)
 

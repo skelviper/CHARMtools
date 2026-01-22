@@ -5,6 +5,9 @@ import numpy as np
 
 from ..utils.CHARMio import parse_pairs, parse_3dg, write_3dg
 
+PHASE_PROB_COLS = ["phase_prob00", "phase_prob01", "phase_prob10", "phase_prob11"]
+PHASE_PROB_THRES = 0.75
+
 def get_legs(pairs:pd.DataFrame)->pd.DataFrame:
     # get all legs of contacts
     leg_list1 = pairs[["chrom1", "pos1"]]
@@ -59,6 +62,14 @@ def particle_evidence(chrom_structure:pd.DataFrame, legs:pd.DataFrame, chrom:str
         data = point_counts
         )
 
+def filter_pairs_by_phase_prob(pairs: pd.DataFrame, min_prob: float) -> pd.DataFrame:
+    # Skip filtering if phase_prob columns are missing.
+    if not all(col in pairs.columns for col in PHASE_PROB_COLS):
+        return pairs
+    probs = pairs[PHASE_PROB_COLS].apply(pd.to_numeric, errors="coerce")
+    max_prob = probs.max(axis=1)
+    return pairs.loc[max_prob >= min_prob]
+
 # command entry point
 def cli(args):
     structure, pairs, out_filename, clean_quantile, max_clean_distance = \
@@ -85,6 +96,7 @@ def clean3(s_name, con_name, clean_quantile, max_clean_distance):
     s[["x","y","z"]] = s[["x","y","z"]] * norm_factor
     ## read pairs
     pairs = parse_pairs(con_name)
+    pairs = filter_pairs_by_phase_prob(pairs, PHASE_PROB_THRES)
     
     # get legs from contacts
     legs = get_legs(pairs)
