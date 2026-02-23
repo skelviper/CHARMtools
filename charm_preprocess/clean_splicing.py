@@ -3,7 +3,6 @@ import time
 from concurrent import futures
 from functools import partial
 import pandas as pd
-import re
 import numpy as np
 
 
@@ -16,14 +15,7 @@ def cli(args)->int:
     pairs = parse_pairs(filename)
     # build in-mem exon index
     gtf = parse_gtf(gtf_file)
-    try:
-        typegenome = re.search(r'rabbit', gtf_file).group(0)
-    except:
-        typegenome = "else"
-    if typegenome == "rabbit":
-        ref = build_in_memory_index(get_exon_rab(gtf))
-    else:
-        ref = build_in_memory_index(get_exon(gtf))
+    ref = build_in_memory_index(get_exon(gtf))
     #do search
     cleaned = clean_splicing(pairs, ref, thread)
     write_pairs(cleaned, out_name)
@@ -118,31 +110,19 @@ def clean_splicing(pairs:pd.DataFrame, ref:dict, thread:int)->pd.DataFrame:
     sys.stderr.write("clean_splicing: finished in %.2fs\n" % (time.time() - t0))
     return cleaned
 
-def get_exon_rab(gtf:pd.DataFrame) -> pd.DataFrame:
-    # extract exon-gene_name from gtf table
-    relevant = gtf.query('feature == "exon"') #using HAVANA only
-    gene_id = relevant["group"].str.extract('gene_id "([A-Za-z0-9_-]+)";') #extract gene name from group
-    gene_id.columns = ["gene_id"] # extract returns dataframe rather than series
-    # don't mind strand
-    return pd.concat([relevant.drop(["group","feature","source","score","strand","frame"],axis=1),gene_id],axis=1)
-
 if __name__ == "__main__":
     # infile = "/shareb/zliu/project/202212/hires_pipe/result/cleaned_pairs/c12/OrgfE951001.pairs.gz"
     # gtf_file = "/share/Data/public/ref_genome/mouse_ref/M23/raw_data/annotation.gtf"
     # outfile = "/shareb/zliu/project/202212/hires_pipe/result/cleaned_pairs/c123/OrgfE951001.pairs.gz"
-    infile = sys.argv[1]
-    gtf_file = sys.argv[2]
-    outfile = sys.argv[3]
-    typegenome = sys.argv[4]
+    if len(sys.argv) < 4:
+        raise SystemExit("Usage: clean_splicing.py <pairs> <gtf> <output>")
+    infile, gtf_file, outfile = sys.argv[1:4]
     thread = 6
 
     pairs = parse_pairs(infile)
     # build in-mem exon index
     gtf = parse_gtf(gtf_file)
-    if typegenome == "rab":
-        ref = build_in_memory_index(get_exon_rab(gtf))
-    else:
-        ref = build_in_memory_index(get_exon(gtf))
+    ref = build_in_memory_index(get_exon(gtf))
     # do search
     cleaned = clean_splicing(pairs, ref, thread)
     write_pairs(cleaned, outfile)

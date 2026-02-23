@@ -7,6 +7,14 @@ from ..utils.CHARMio import parse_pairs, parse_3dg, write_3dg
 
 PHASE_PROB_COLS = ["phase_prob00", "phase_prob01", "phase_prob10", "phase_prob11"]
 PHASE_PROB_THRES = 0.75
+HAP_SUFFIXES = ("(mat)", "(pat)")
+
+def strip_hap_suffix(chrom: str) -> str:
+    chrom = str(chrom)
+    for suffix in HAP_SUFFIXES:
+        if chrom.endswith(suffix):
+            return chrom[:-len(suffix)]
+    return chrom
 
 def get_legs(pairs:pd.DataFrame)->pd.DataFrame:
     # get all legs of contacts
@@ -42,19 +50,32 @@ def particle_evidence(chrom_structure:pd.DataFrame, legs:pd.DataFrame, chrom:str
     ## output:
     ##     DataFrame same length/index of input chrom_structure
     try:
-        chrom_legs = legs.loc[chrom, "pos"]
+        chrom_legs = legs.loc[[chrom], "pos"]
     except KeyError:
-        # whole chromosome loss
-        point_counts = np.zeros_like(
-            chrom_structure.index.values
-            )
-        return  pd.Series(
-            index = chrom_structure.index,
-            data = point_counts
-            )
+        base = strip_hap_suffix(chrom)
+        if base != chrom and base in legs.index:
+            chrom_legs = legs.loc[[base], "pos"]
+        else:
+            candidates = []
+            if base == chrom:
+                for suffix in HAP_SUFFIXES:
+                    key = f"{chrom}{suffix}"
+                    if key in legs.index:
+                        candidates.append(key)
+            if candidates:
+                chrom_legs = legs.loc[candidates, "pos"]
+            else:
+                # whole chromosome loss
+                point_counts = np.zeros_like(
+                    chrom_structure.index.values
+                    )
+                return  pd.Series(
+                    index = chrom_structure.index,
+                    data = point_counts
+                    )
     point_counts = point_near_count(
         chrom_structure.index.get_level_values("pos"),
-        legs.loc[chrom, "pos"],
+        chrom_legs,
         max_clean_distance
     )
     return pd.Series(

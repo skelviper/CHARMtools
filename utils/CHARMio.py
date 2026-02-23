@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import gzip
 import os
+import warnings
 from pkgutil import get_data
 from io import StringIO
 # import ref
@@ -37,8 +38,13 @@ def parse_pairs(filename:str)->"Cell":
                 break
             comments.append(line)
     #read table format data
-    pairs = pd.read_table(filename, header=None, comment="#",low_memory=False)
+    try:
+        pairs = pd.read_table(filename, header=None, comment="#", low_memory=False)
+    except pd.errors.EmptyDataError:
+        pairs = pd.DataFrame(columns=name_array)
     pairs.attrs["comments"] = comments
+    if len(pairs.attrs["comments"]) == 0:
+        pairs.attrs["comments"] = ["#columns:" + "\t".join(name_array) + "\n"]
     pairs.attrs["name"], _ = divide_name(filename) # get real sample name
     #assign column names
     pairs.columns = name_array[0:pairs.shape[1]]
@@ -146,9 +152,19 @@ def m2s_index(_3dg:pd.DataFrame)->pd.DataFrame:
     if _3dg.index.get_level_values(1).min() < 0:
         raise ValueError("Negative position found in the dataframe, perhaps the dataframe has been converted to start-as-pos already.")
     return _3dg
+    
 def write_3dg(_3dg:pd.DataFrame, outname:str, m2s=False):
     if m2s:
-        _3dg = m2s_index(_3dg)
+        try:
+            _3dg = m2s_index(_3dg)
+        except ValueError as e:
+            if "No non-zero position differences found" in str(e):
+                warnings.warn(
+                    "write_3dg: skip m2s because binsize cannot be inferred "
+                    "(insufficient position differences). Writing positions as-is."
+                )
+            else:
+                raise
     _3dg.to_csv(outname, sep="\t",header=None)
     return 0
 
