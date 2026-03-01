@@ -8,7 +8,6 @@ import multiprocessing
 import numpy as np
 import matplotlib.pyplot as plt
 import tqdm
-import cooltools.lib.plotting
 import gzip
 import multiprocessing
 from tqdm import tqdm
@@ -175,11 +174,10 @@ def plot_enrichment(matrix,flank):
     axs[0]= plt.plot(np.mean(matrix,axis=0))
     plt.sca(axs[1])
     matrix = matrix[np.argsort(np.sum(matrix,axis=1))[::-1],:]
-    #ax = axs[1].imshow(matrix, cmap="fall", aspect="auto",vmin = 0,vmax= 0.5)
     # 95% data as vmax and vmin
     vmax = np.percentile(matrix, 95)
     vmin = np.percentile(matrix, 5)
-    ax = axs[1].imshow(matrix, cmap="fall", aspect="auto",vmin = vmin,vmax= vmax)
+    ax = axs[1].imshow(matrix, cmap="coolwarm", aspect="auto",vmin = vmin,vmax= vmax)
 
     plt.colorbar(ax)
     plt.yticks([])

@@ -1,0 +1,20 @@
+name: analysis
+channels:
+  - conda-forge
+dependencies:
+  - scanpy
+  - scikit-learn
+  - anndata
+  - ipykernel
+  - numpy
+  - scipy
+  - leidenalg
+  - seaborn
+  - tqdm
+  - louvain
+  - matplotlib
+  - python
+  - numba
+  - pandas
+  - h5py
+prefix: /mnt/ssd/zliu/miniforge3/envs/analysis
