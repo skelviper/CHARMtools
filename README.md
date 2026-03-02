@@ -11,6 +11,7 @@ CHARMtools is a comprehensive toolkit designed for single-cell Hi-C and multi-om
 
 - [Features](#features)
 - [Installation](#installation)
+- [Cell3D Object Usage (Example Data)](#-cell3d-object-usage-example-data)
 - [Quick Start](#quick-start)
 - [Usage Guide](#usage-guide)
 - [Module Descriptions](#module-descriptions)
@@ -28,23 +29,29 @@ CHARMtools is a comprehensive toolkit designed for single-cell Hi-C and multi-om
 
 ## 🚀 Installation
 
-### Requirements
-
-- Python 3.7+
-- R environment (for some analysis modules)
-
 ### Installation Steps
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/CHARMtools.git
+git clone https://github.com/skelviper/CHARMtools.git
 cd CHARMtools
-
-# Install Python dependencies
-mamba create -n charmtools -c conda-forge -c bioconda python=3.10
-mamba activate charmtools
-mamba env update --file charmtools.yaml 
 ```
+
+If you only use the preprocess workflow (`charm_preprocess_pipeline`), use the built-in environment `envs/charm.yml`; if you plan to run Cell3D and other downstream analyses, use `envs/charmtools.yml`.
+
+```bash
+# preprocess only
+mamba env create -f envs/charm.yml
+mamba activate charm
+
+# Cell3D and downstream analysis
+mamba env create -f envs/charmtools.yml
+mamba activate analysis
+```
+
+## 🧪 Cell3D Object Usage (Example Data)
+
+`example_with_data/example.ipynb` is a quick test notebook for part of the Cell3D workflow, with demo files in `example_with_data/data/`.
 
 ## 📁 Module Descriptions
 
