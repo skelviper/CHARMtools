@@ -4,6 +4,7 @@ import tqdm
 import concurrent.futures
 from functools import partial
 from scipy import stats
+from scipy.spatial.distance import pdist, squareform
 from ..utils.helper import auto_genome_coord
 
 class MultiCell3DAnalysis:
@@ -74,10 +75,15 @@ class MultiCell3DAnalysis:
         else:
             return np.array(results)
 
-    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None, allele=True, combine=True, nproc=20):
+    def calc_3dproximity_matrix(self, genome_coord, distance_threshold=3, cellnames=None, allele=True, combine=True, nproc=20, fast_loaded=True):
         if cellnames is None:
             cellnames = self.cellnames
         temp_cells = self.get_cell(cellnames)
+        if not isinstance(temp_cells, list):
+            temp_cells = [temp_cells]
+
+        if combine and fast_loaded and _can_use_loaded_dense_fast_path(temp_cells):
+            return _calc_3dproximity_loaded_dense(temp_cells, genome_coord, distance_threshold, allele)
 
         if allele:
             with concurrent.futures.ProcessPoolExecutor(nproc) as executor:
@@ -201,6 +207,85 @@ def _calc_proximity(cell, genome_coord, distance_threshold):
 def _calc_distance(cell, genome_coord):
     mat = cell.calc_distance_matrix(genome_coord)
     return mat
+
+def _can_use_loaded_dense_fast_path(cells):
+    if len(cells) == 0:
+        return False
+
+    first = cells[0]
+    if getattr(first, "on_disk", False) or getattr(first, "tdg", None) is None:
+        return False
+    if getattr(first, "chrom_length", None) is None:
+        return False
+    if not {"chrom", "pos", "x", "y", "z"}.issubset(first.tdg.columns):
+        return False
+
+    expected_rows = _expected_dense_rows(first.chrom_length, first.resolution)
+    if len(first.tdg) != expected_rows:
+        return False
+
+    for cell in cells[1:]:
+        if getattr(cell, "on_disk", False) or getattr(cell, "tdg", None) is None:
+            return False
+        if getattr(cell, "chrom_length", None) is None:
+            return False
+        if cell.resolution != first.resolution:
+            return False
+        if len(cell.tdg) != expected_rows:
+            return False
+        if not {"chrom", "pos", "x", "y", "z"}.issubset(cell.tdg.columns):
+            return False
+
+    return True
+
+def _expected_dense_rows(chrom_length, resolution):
+    sizes = chrom_length["size"].to_numpy(dtype=np.int64)
+    return int(np.sum((sizes + resolution - 1) // resolution))
+
+def _region_indices_from_dense_tdg(tdg, genome_coord):
+    chrom, start, end = auto_genome_coord(genome_coord)
+    chrom_values = tdg["chrom"].astype(str).to_numpy()
+    pos_values = tdg["pos"].to_numpy()
+
+    if start is None:
+        return np.flatnonzero(chrom_values == chrom)
+
+    return np.flatnonzero(
+        (chrom_values == chrom)
+        & (pos_values >= int(start))
+        & (pos_values <= int(end))
+    )
+
+def _calc_3dproximity_loaded_dense(cells, genome_coord, distance_threshold, allele):
+    if allele:
+        genome_coords = [genome_coord]
+    else:
+        genome_coords = [
+            genome_coord.replace(":", "a:"),
+            genome_coord.replace(":", "b:")
+        ]
+
+    total = None
+    n_mats = 0
+
+    for coord in genome_coords:
+        idx = _region_indices_from_dense_tdg(cells[0].tdg, coord)
+        if len(idx) == 0:
+            raise ValueError(f"No data found for genomic region: {coord}")
+
+        xyz_cols = [cells[0].tdg.columns.get_loc(col) for col in ["x", "y", "z"]]
+
+        for cell in cells:
+            coords = cell.tdg.iloc[idx, xyz_cols].to_numpy(dtype=np.float32, copy=False)
+            mat = squareform(pdist(coords, metric="euclidean")) < distance_threshold
+
+            if total is None:
+                total = np.zeros_like(mat, dtype=np.float64)
+
+            total += mat
+            n_mats += 1
+
+    return total / n_mats
 
 def _calc_scABC_pred_gene(cell, tss_genome_coord, flank, expression_key, activity_keys, distance_type):
     expression, abc = cell.calc_scABC_pred_gene(tss_genome_coord, flank, expression_key, activity_keys, distance_type)
